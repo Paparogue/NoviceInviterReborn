@@ -1,0 +1,23 @@
+[
+  {
+    "Author": "Paparogue",
+    "Name": "NoviceInviter",
+    "Punchline": "Auto invite sprouts to the Novice Network.",
+    "Description": "Auto invite sprouts to the Novice Network.",
+    "Tags": [ "Utility", "Social", "Other" ],
+    "InternalName": "NoviceInviter",
+    "AssemblyVersion": "1.0.0.0",
+    "TestingAssemblyVersion": "1.0.0.0",
+    "RepoUrl": "https://github.com/Paparogue",
+    "ApplicableVersion": "any",
+    "DalamudApiLevel": 8,
+    "IsHide": "False",
+    "IsTestingExclusive": "False",
+    "DownloadCount": 1,
+    "LastUpdate": 1618608322,
+    "DownloadLinkInstall": "https://github.com/Paparogue/NoviceInviter/files/12051796/latest.zip",
+    "DownloadLinkUpdate": "https://github.com/Paparogue/NoviceInviter/files/12051796/latest.zip",
+    "DownloadLinkTesting": "https://github.com/Paparogue/NoviceInviter/files/12051796/latest.zip",
+    "IconUrl": "https://cdn.discordapp.com/attachments/695506857145532457/1129405551042904074/noviceinv_64.png"
+  }
+]
