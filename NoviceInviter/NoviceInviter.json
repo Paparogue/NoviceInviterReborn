@@ -1,0 +1,11 @@
+{
+  "Author": "Paparogue",
+  "Name": "NoviceInviter",
+  "InternalName": "NoviceInviter",
+  "Description": "Auto invite sprouts to the Novice Network.",
+  "Punchline": "Auto invite sprouts to the Novice Network.",
+  "ApplicableVersion": "any",
+  "RepoUrl": "https://github.com/Paparogue",
+  "DalamudApiLevel": 8,
+  "IconUrl": "https://cdn.discordapp.com/attachments/695506857145532457/1129405551042904074/noviceinv_64.png"
+}
