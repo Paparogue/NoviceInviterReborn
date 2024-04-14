@@ -6,6 +6,6 @@
   "Punchline": "Auto invite sprouts to the Novice Network.",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/Paparogue",
-  "DalamudApiLevel": 8,
+  "DalamudApiLevel": 9,
   "IconUrl": "https://cdn.discordapp.com/attachments/695506857145532457/1129405551042904074/noviceinv_64.png"
 }

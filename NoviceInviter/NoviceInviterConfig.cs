@@ -13,7 +13,8 @@ namespace NoviceInviter
         public bool enableInvite = false;
         public float sliderMaxInviteRange = 100.0f;
         public int sliderTimeBetweenInvites = 500;
-        public bool checkBoxBardInvite = false; 
+        public bool checkBoxBardInvite = false;
+        public bool SendInviteBool { get; set; }
 
         public void Init(NoviceInviter plugin)
         {
@@ -22,7 +23,7 @@ namespace NoviceInviter
 
         public void Save()
         {
-            NoviceInviter.PluginInterface.SavePluginConfig(this);
+            plugin.PluginInterface.SavePluginConfig(this);
         }
 
         public bool DrawConfigUI()
@@ -90,6 +91,16 @@ namespace NoviceInviter
             ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0xFF5E5BAA);
             ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0xFF5E5BDD);
             ImGui.PopStyleColor(3);
+
+            if (ImGui.Button("Send Invite"))
+            {
+                Task.Run(() => plugin.SendPlayerSearchInvites());
+            }
+
+            if (ImGui.Button("Clear Invite"))
+            {
+                plugin.playersToInvite.Clear();
+            }
 
             ImGui.End();
 

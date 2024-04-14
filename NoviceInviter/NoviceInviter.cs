@@ -1,16 +1,20 @@
 ﻿using System.Numerics;
 using System.Runtime.InteropServices;
 using Dalamud.Game;
-using Dalamud.Plugin;
-using Dalamud.Game.Command;
 using Dalamud.IoC;
+using Dalamud.Plugin;
+using Dalamud.Game.ClientState.Objects.Types;
+using Dalamud.Game.Command;
 using Dalamud.Logging;
-using Dalamud.Game.ClientState;
-using Dalamud.Game.ClientState.Conditions;
-using Dalamud.Game.ClientState.Objects;
+using Dalamud.Plugin.Services;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
-using Dalamud.Game.ClientState.Objects.Types;
+using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Hooking;
+using System.Collections;
+using static Lumina.Data.Parsing.Layer.LayerCommon;
+using static NoviceInviter.PlayerSearch;
+
 
 #pragma warning disable CA1816
 #pragma warning disable CS8602
@@ -25,28 +29,120 @@ public class NoviceInviter : IDalamudPlugin
     private delegate char NoviceInviteDelegate(long a1, long a2, short worldID, IntPtr playerName, byte a3);
 
     private readonly NoviceInviteDelegate _noviceInvite;
+
     private bool drawConfigWindow;
     private readonly List<string> _invitedPlayers = new();
     private DateTime? _minWaitToCheck = DateTime.UtcNow;
     private DateTime? _minWaitToSave = DateTime.UtcNow;
-    private const string invitedPath = "./player.inv";
+    private const string invitedPath = "C:\\Users\\Public\\player.inv";
 
-    [PluginService] public static CommandManager CommandManager { get; private set; } = null!;
-    [PluginService] public static DalamudPluginInterface PluginInterface { get; private set; } = null!;
-    [PluginService] public ClientState Client { get; set; } = null!;
-    [PluginService] public static SigScanner SigScanner { get; private set; } = null!;
-    [PluginService] public static ObjectTable Objects { get; private set; } = null!;
-    [PluginService] public static Condition Condition { get; private set; } = null!;
+    public DalamudPluginInterface PluginInterface { get; init; }
+    public IClientState Client { get; init; }
+    public ISigScanner SigScanner { get; init; }
+    public IObjectTable Objects { get; init; }
+    public ICommandManager CommandManager { get; init; }
+    public ICondition Condition { get; init; }
+    public IGameInteropProvider DalamudHook { get; init; }
 
-    public NoviceInviter()
+    public delegate void PlayerSearchDelegate(IntPtr globalFunction, IntPtr playerArray, uint always0xA);
+    private Hook<PlayerSearchDelegate> PlayerSearchHook = null;
+    public List<String> playersToInvite = new List<String>();
+
+    private void PlayerSearchDetour(IntPtr globalFunction, IntPtr playerArray, uint always0xA)
     {
+        IntPtr playerArrayBeginning = playerArray + 0x3C;
+        for (int i = 0; i < 10; i++)
+        {
+            var playerData = Marshal.PtrToStructure<PlayerSearch.PlayerData>(playerArrayBeginning);
+
+            if (IsValidPlayerName(playerData.PlayerName))
+            {
+                //PluginLog.Warning("Player has been added: " + playerData.PlayerName.Trim());
+                playersToInvite.Add(playerData.PlayerName.Trim());
+            }
+            else
+            {
+                break;
+            }
+
+            playerArrayBeginning += 0x68;
+        }
+
+        PlayerSearchHook.Original(globalFunction, playerArray, always0xA);
+    }
+
+    private bool _isActive = false;
+
+    public void SendPlayerSearchInvites()
+    {
+        if (_isActive)
+        {
+            return;
+        }
+        _isActive = true;
+        try
+        {
+            foreach (var player in playersToInvite)
+            {
+                if (_invitedPlayers.Contains(player.Trim())) continue;
+                SendNoviceInvite(player, (short)Client.LocalPlayer.CurrentWorld.Id);
+                _invitedPlayers.Add(player.Trim());
+                Thread.Sleep(500);
+            }
+
+            playersToInvite.Clear();
+        }
+        finally
+        {
+            _isActive = false;
+        }
+    }
+
+    private bool IsValidPlayerName(string playerName)
+    {
+        if (string.IsNullOrEmpty(playerName))
+            return false;
+
+        foreach (char c in playerName)
+        {
+            if (c < 32 || c > 126)
+                return false;
+        }
+        return true;
+    }
+
+    public NoviceInviter(
+        [RequiredVersion("1.0")] DalamudPluginInterface pluginInterface,
+        [RequiredVersion("1.0")] IClientState client,
+        [RequiredVersion("1.0")] ISigScanner sigScanner,
+        [RequiredVersion("1.0")] IObjectTable objects,
+        [RequiredVersion("1.0")] ICommandManager commandManager,
+        [RequiredVersion("1.0")] IGameInteropProvider dalamudHook,
+        [RequiredVersion("1.0")] ICondition condition
+    )
+    {
+        PluginInterface = pluginInterface;
+        Client = client;
+        DalamudHook = dalamudHook;
+        SigScanner = sigScanner;
+        Objects = objects;
+        CommandManager = commandManager;
+        Condition = condition;
+
         PluginConfig = PluginInterface.GetPluginConfig() as NoviceInviterConfig ?? new NoviceInviterConfig();
         PluginConfig.Init(this);
         SetupCommands();
         LoadInvitedPlayers();
-        var noviceSigPtr =
-            SigScanner.ScanText("E8 ?? ?? ?? ?? EB A8 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 48 89 5C 24");
+
+        var noviceSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? EB A8 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 48 89 5C 24");
         _noviceInvite = Marshal.GetDelegateForFunctionPointer<NoviceInviteDelegate>(noviceSigPtr);
+
+        var playerSearchSigPtr = SigScanner.ScanText("40 56 57 41 54 41 55 41 57 48 83 EC 30");
+        if (playerSearchSigPtr != IntPtr.Zero)
+        {
+            PlayerSearchHook = DalamudHook.HookFromAddress<PlayerSearchDelegate>(playerSearchSigPtr, PlayerSearchDetour);
+            PlayerSearchHook.Enable();
+        }
         PluginInterface.UiBuilder.Draw += BuildUI;
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
         PluginInterface.UiBuilder.Draw += OnUpdate;
@@ -79,6 +175,8 @@ public class NoviceInviter : IDalamudPlugin
 
     public void Dispose()
     {
+        PlayerSearchHook.Disable();
+        PlayerSearchHook.Dispose();
         PluginInterface.UiBuilder.Draw -= BuildUI;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
         PluginInterface.UiBuilder.Draw -= OnUpdate;
