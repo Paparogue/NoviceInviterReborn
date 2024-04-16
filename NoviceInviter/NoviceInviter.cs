@@ -46,7 +46,22 @@ public class NoviceInviter : IDalamudPlugin
 
     public delegate void PlayerSearchDelegate(IntPtr globalFunction, IntPtr playerArray, uint always0xA);
     private Hook<PlayerSearchDelegate> PlayerSearchHook = null;
-    public List<String> playersToInvite = new List<String>();
+    private List<String> _playerSearchList = new List<String>();
+
+    public int InvitedPlayersAmount()
+    {
+        return _invitedPlayers.Count;
+    }
+
+    public int PlayerSearchAmount()
+    {
+        return _playerSearchList.Count;
+    }
+
+    public void PlayerSearchClear()
+    {
+        _playerSearchList.Clear();
+    }
 
     private void PlayerSearchDetour(IntPtr globalFunction, IntPtr playerArray, uint always0xA)
     {
@@ -58,7 +73,7 @@ public class NoviceInviter : IDalamudPlugin
             if (IsValidPlayerName(playerData.PlayerName))
             {
                 //PluginLog.Warning("Player has been added: " + playerData.PlayerName.Trim());
-                playersToInvite.Add(playerData.PlayerName.Trim());
+                _playerSearchList.Add(playerData.PlayerName.Trim());
             }
             else
             {
@@ -80,17 +95,23 @@ public class NoviceInviter : IDalamudPlugin
             return;
         }
         _isActive = true;
+        //PluginLog.Warning("Player Amount to Invite: " + playersToInvite.Count);
         try
         {
-            foreach (var player in playersToInvite)
+            foreach (var player in _playerSearchList)
             {
-                if (_invitedPlayers.Contains(player.Trim())) continue;
+                if (_invitedPlayers.Contains(player.Trim()))
+                {
+                    //PluginLog.Warning("Player is already in the list: " + player);
+                    continue;
+                }
+               // PluginLog.Error("NEW PLAYER TO INVITE: " + player);
                 SendNoviceInvite(player, (short)Client.LocalPlayer.CurrentWorld.Id);
                 _invitedPlayers.Add(player.Trim());
                 Thread.Sleep(500);
             }
 
-            playersToInvite.Clear();
+            _playerSearchList.Clear();
         }
         finally
         {
