@@ -47,17 +47,15 @@ public class NoviceInviter : IDalamudPlugin
     public ICondition Condition { get; init; }
     public IGameInteropProvider DalamudHook { get; init; }
 
-    public Chat chatties;
-
+    private Chat chatties;
     public delegate void PlayerSearchDelegate(IntPtr globalFunction, IntPtr playerArray, uint always0xA);
     private Hook<PlayerSearchDelegate> PlayerSearchHook = null;
     private List<String> _playerSearchList = new List<String>();
     private static readonly object predictionLock = new object();
-    private static readonly object chattiesLock = new object();
-
     MLContext mlContext;
     ITransformer trainedModel;
-    DataViewSchema modelSchema;
+    private bool _isActive = false;
+    private DataViewSchema modelSchema;
     PredictionEngine<NameData, NamePrediction> predictionEngine;
 
     public int InvitedPlayersAmount()
@@ -103,8 +101,6 @@ public class NoviceInviter : IDalamudPlugin
         PlayerSearchHook.Original(globalFunction, playerArray, always0xA);
     }
 
-    private bool _isActive = false;
-
     public void SendPlayerSearchInvites()
     {
         if (_isActive)
@@ -116,15 +112,13 @@ public class NoviceInviter : IDalamudPlugin
         {
             foreach (var player in _playerSearchList)
             {
-                var sampleName = new NameData { Name = player.Trim() };
-                var prediction = predictionEngine.Predict(sampleName);
-                if (_invitedPlayers.Contains(player.Trim()) || prediction.PredictedLabel == true)
+                if (_invitedPlayers.Contains(player.Trim()) || MLBotDetection(player))
                 {
                     continue;
                 }
                 SendNoviceInvite(player, (short)Client.LocalPlayer.CurrentWorld.Id);
                 _invitedPlayers.Add(player.Trim());
-                Thread.Sleep(500);
+                Thread.Sleep(200);
             }
 
             _playerSearchList.Clear();
