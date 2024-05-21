@@ -11,10 +11,13 @@ using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Hooking;
-using System.Collections;
-using static Lumina.Data.Parsing.Layer.LayerCommon;
-using static NoviceInviter.PlayerSearch;
-
+using System.Text;
+using Microsoft.ML;
+using System.Reflection;
+using ECommons;
+using ECommons.Automation;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.Rebar;
+using ECommons.GameHelpers;
 
 #pragma warning disable CA1816
 #pragma warning disable CS8602
@@ -44,9 +47,18 @@ public class NoviceInviter : IDalamudPlugin
     public ICondition Condition { get; init; }
     public IGameInteropProvider DalamudHook { get; init; }
 
+    public Chat chatties;
+
     public delegate void PlayerSearchDelegate(IntPtr globalFunction, IntPtr playerArray, uint always0xA);
     private Hook<PlayerSearchDelegate> PlayerSearchHook = null;
     private List<String> _playerSearchList = new List<String>();
+    private static readonly object predictionLock = new object();
+    private static readonly object chattiesLock = new object();
+
+    MLContext mlContext;
+    ITransformer trainedModel;
+    DataViewSchema modelSchema;
+    PredictionEngine<NameData, NamePrediction> predictionEngine;
 
     public int InvitedPlayersAmount()
     {
@@ -60,6 +72,12 @@ public class NoviceInviter : IDalamudPlugin
 
     public void PlayerSearchClear()
     {
+        StringBuilder csvContent = new StringBuilder();
+        foreach (var player in _playerSearchList)
+        {
+            csvContent.AppendLine($"{player},0");
+        }
+        System.Windows.Forms.Clipboard.SetText(csvContent.ToString());
         _playerSearchList.Clear();
     }
 
@@ -72,7 +90,6 @@ public class NoviceInviter : IDalamudPlugin
 
             if (IsValidPlayerName(playerData.PlayerName))
             {
-                //PluginLog.Warning("Player has been added: " + playerData.PlayerName.Trim());
                 _playerSearchList.Add(playerData.PlayerName.Trim());
             }
             else
@@ -95,17 +112,16 @@ public class NoviceInviter : IDalamudPlugin
             return;
         }
         _isActive = true;
-        //PluginLog.Warning("Player Amount to Invite: " + playersToInvite.Count);
         try
         {
             foreach (var player in _playerSearchList)
             {
-                if (_invitedPlayers.Contains(player.Trim()))
+                var sampleName = new NameData { Name = player.Trim() };
+                var prediction = predictionEngine.Predict(sampleName);
+                if (_invitedPlayers.Contains(player.Trim()) || prediction.PredictedLabel == true)
                 {
-                    //PluginLog.Warning("Player is already in the list: " + player);
                     continue;
                 }
-               // PluginLog.Error("NEW PLAYER TO INVITE: " + player);
                 SendNoviceInvite(player, (short)Client.LocalPlayer.CurrentWorld.Id);
                 _invitedPlayers.Add(player.Trim());
                 Thread.Sleep(500);
@@ -142,6 +158,7 @@ public class NoviceInviter : IDalamudPlugin
         [RequiredVersion("1.0")] ICondition condition
     )
     {
+        //SetupAssemblyResolving();
         PluginInterface = pluginInterface;
         Client = client;
         DalamudHook = dalamudHook;
@@ -154,6 +171,8 @@ public class NoviceInviter : IDalamudPlugin
         PluginConfig.Init(this);
         SetupCommands();
         LoadInvitedPlayers();
+        ECommonsMain.Init(PluginInterface, this);
+        chatties = new Chat();
 
         var noviceSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? EB A8 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 48 89 5C 24");
         _noviceInvite = Marshal.GetDelegateForFunctionPointer<NoviceInviteDelegate>(noviceSigPtr);
@@ -167,6 +186,14 @@ public class NoviceInviter : IDalamudPlugin
         PluginInterface.UiBuilder.Draw += BuildUI;
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
         PluginInterface.UiBuilder.Draw += OnUpdate;
+        string modelPath = @"C:\Users\AdminPC\source\repos\NoviceInviter2\NoviceInviter\model.zip";
+        mlContext = new MLContext();
+        using (var fileStream = new FileStream(modelPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            trainedModel = mlContext.Model.Load(fileStream, out modelSchema);
+        }
+        predictionEngine = mlContext.Model.CreatePredictionEngine<NameData, NamePrediction>(trainedModel);
+
     }
 
     private void SendNoviceInvite(string playerName, short playerWorldID)
@@ -196,6 +223,7 @@ public class NoviceInviter : IDalamudPlugin
 
     public void Dispose()
     {
+        ECommonsMain.Dispose();
         PlayerSearchHook.Disable();
         PlayerSearchHook.Dispose();
         PluginInterface.UiBuilder.Draw -= BuildUI;
@@ -247,12 +275,52 @@ public class NoviceInviter : IDalamudPlugin
         }
     }
 
+    public static bool HandlePlayerData(string playerName, string server, bool saveToFile = false)
+    {
+        string filePath = @"C:\Users\Public\bots.txt";
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+        if (!File.Exists(filePath))
+        {
+            File.Create(filePath).Close();
+        }
+        List<string> lines = new List<string>(File.ReadAllLines(filePath));
+        string newEntry = $"{playerName},{server}";
+
+        if (saveToFile)
+        {
+            if (!lines.Contains(newEntry))
+            {
+                File.AppendAllText(filePath, newEntry + Environment.NewLine);
+                return false;
+            }
+            return true;
+        }
+        else
+        {
+            return lines.Contains(newEntry);
+        }
+    }
+
+
+    public Boolean MLBotDetection(String PlayerName)
+    {
+        var sampleName = new NameData { Name = PlayerName.Trim() };
+        NamePrediction prediction;
+
+        lock (predictionLock)
+        {
+            prediction = predictionEngine.Predict(sampleName);
+        }
+        return prediction.PredictedLabel;
+    }
 
     private void OnUpdate()
     {
-        if (!PluginConfig.enableInvite) return;
         if(CheckIfMinimumTimeHasPassed(ref _minWaitToSave, 15000))
+        {
             SaveInvitedPlayers();
+        }
+        if (!PluginConfig.enableInvite) return;
         // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
         if (Client is not { IsLoggedIn: true } || Condition[ConditionFlag.BoundByDuty]) return;
         // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
@@ -261,16 +329,23 @@ public class NoviceInviter : IDalamudPlugin
         for (var i = 0; i < Objects.Length; i++)
         {
             var gameObject = Objects.CreateObjectReference(Objects.GetObjectAddress(i));
-            if (gameObject?.IsValid() != true || gameObject.ObjectKind != ObjectKind.Player) continue;
+            if (gameObject is null || !gameObject.IsValid() || gameObject.ObjectKind != ObjectKind.Player) continue;
             var player = gameObject as PlayerCharacter;
-            //Don't invite people that are not from your World
+            string worldName = player.CurrentWorld.GameData.Name.ToString();
+            var jobName = player.ClassJob.GameData.NameEnglish.ToString().Trim();
+            if (MLBotDetection(player.Name.TextValue) && (jobName.EqualsIgnoreCase("Archer") || jobName.EqualsIgnoreCase("Lancer") || jobName.EqualsIgnoreCase("Bard") || jobName.EqualsIgnoreCase("Marauder")))
+            {
+                if (!HandlePlayerData(player.Name.TextValue.Trim(), worldName) && chatties != null)
+                {
+                    chatties.SendMessage("/void " + player.Name.TextValue.Trim() + " " + worldName + " Bot detected by ML");
+                    HandlePlayerData(player.Name.TextValue.Trim(), worldName, true);
+                }
+                continue;
+            }
+            //Don't invite people that are not from this World
             if (player.HomeWorld.Id != Client.LocalPlayer.HomeWorld.Id) continue;
             //Don't invite bots Archer/Bard/Unclassed
-            if (!PluginConfig.checkBoxBardInvite)
-                if (player.ClassJob.Id is 23 or 0 or 5)
-                    continue;
-            //Anti Spam Bots
-            if(player.Level < 5) continue;
+            //if (!PluginConfig.checkBoxBardInvite)
             //Don't invite people that are not sprouts
             if (player.OnlineStatus.Id != 32) continue;
             //Don't annoy people with double invites
@@ -278,7 +353,6 @@ public class NoviceInviter : IDalamudPlugin
             //Only invite people in a certain range
             if (!IsPlayerWithinDistance(gameObject, PluginConfig.sliderMaxInviteRange)) continue;
             if (!CheckIfMinimumTimeHasPassed(ref _minWaitToCheck, PluginConfig.sliderTimeBetweenInvites)) continue;
-            PluginLog.Log("Invited " + player.Name.TextValue);
             SendNoviceInvite(player.Name.TextValue, (short)player.HomeWorld.Id);
             _invitedPlayers.Add(player.Name.TextValue.Trim());
         }

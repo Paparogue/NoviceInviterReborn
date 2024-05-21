@@ -1,46 +1,77 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>Library</OutputType>
+		<TargetFramework>net8.0-windows7.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<Platforms>AnyCPU;x64</Platforms>
+		<SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
+		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+	</PropertyGroup>
 
-  <PropertyGroup>
-    <OutputType>Library</OutputType>
-    <TargetFramework>net8.0-windows7.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <Platforms>AnyCPU;x64</Platforms>
-    <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
-    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-  </PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+		<DebugType>none</DebugType>
+	</PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <DebugType>none</DebugType>
-  </PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+		<DebugType>none</DebugType>
+	</PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <DebugType>none</DebugType>
-  </PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+		<DebugType>none</DebugType>
+	</PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <DebugType>none</DebugType>
-  </PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+		<DebugType>none</DebugType>
+	</PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <DebugType>none</DebugType>
-  </PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="DalamudPackager" Version="2.1.12" />
+		<PackageReference Include="Lumina.Excel" Version="6.5.2" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="DalamudPackager" Version="2.1.11" />
-    <PackageReference Include="Lumina.Excel" Version="6.4.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="Dalamud">
-      <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\addon\Hooks\dev\Dalamud.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="ImGui.NET">
-      <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\addon\Hooks\dev\ImGui.NET.dll</HintPath>
-      <EmbedInteropTypes></EmbedInteropTypes>
-      <Private>False</Private>
-    </Reference>
-  </ItemGroup>
-
+	<ItemGroup>
+		<Reference Include="Dalamud">
+			<HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\addon\Hooks\dev\Dalamud.dll</HintPath>
+			<Private>False</Private>
+		</Reference>
+		<Reference Include="ECommons">
+		  <HintPath>..\..\..\..\Documents\ECommons.dll</HintPath>
+		</Reference>
+		<Reference Include="ImGui.NET">
+			<HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\addon\Hooks\dev\ImGui.NET.dll</HintPath>
+			<EmbedInteropTypes></EmbedInteropTypes>
+			<Private>False</Private>
+		</Reference>
+		<Reference Include="Microsoft.ML">
+		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.ML.Core">
+		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.Core.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.ML.CpuMath">
+		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.CpuMath.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.ML.Data">
+		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.Data.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.ML.DataView">
+		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.DataView.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.ML.KMeansClustering">
+		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.KMeansClustering.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.ML.PCA">
+		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.PCA.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.ML.StandardTrainers">
+		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.StandardTrainers.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.ML.Transforms">
+		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.Transforms.dll</HintPath>
+		</Reference>
+		<Reference Include="System.Windows.Forms">
+			<HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\runtime\shared\Microsoft.WindowsDesktop.App\8.0.0\System.Windows.Forms.dll</HintPath>
+		</Reference>
+	</ItemGroup>
 </Project>
