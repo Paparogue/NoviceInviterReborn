@@ -112,7 +112,7 @@ public class NoviceInviter : IDalamudPlugin
         {
             foreach (var player in _playerSearchList)
             {
-                if (_invitedPlayers.Contains(player.Trim()) || MLBotDetection(player))
+                if (_invitedPlayers.Contains(player.Trim()) || IsABot(player))
                 {
                     continue;
                 }
@@ -177,9 +177,6 @@ public class NoviceInviter : IDalamudPlugin
             PlayerSearchHook = DalamudHook.HookFromAddress<PlayerSearchDelegate>(playerSearchSigPtr, PlayerSearchDetour);
             PlayerSearchHook.Enable();
         }
-        PluginInterface.UiBuilder.Draw += BuildUI;
-        PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
-        PluginInterface.UiBuilder.Draw += OnUpdate;
         string modelPath = @"C:\Users\AdminPC\source\repos\NoviceInviter2\NoviceInviter\model.zip";
         mlContext = new MLContext();
         using (var fileStream = new FileStream(modelPath, FileMode.Open, FileAccess.Read, FileShare.Read))
@@ -187,7 +184,9 @@ public class NoviceInviter : IDalamudPlugin
             trainedModel = mlContext.Model.Load(fileStream, out modelSchema);
         }
         predictionEngine = mlContext.Model.CreatePredictionEngine<NameData, NamePrediction>(trainedModel);
-
+        PluginInterface.UiBuilder.Draw += BuildUI;
+        PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
+        PluginInterface.UiBuilder.Draw += OnUpdate;
     }
 
     private void SendNoviceInvite(string playerName, short playerWorldID)
@@ -296,61 +295,89 @@ public class NoviceInviter : IDalamudPlugin
     }
 
 
-    public Boolean MLBotDetection(String PlayerName)
+    public bool IsABot(string PlayerName)
     {
-        var sampleName = new NameData { Name = PlayerName.Trim() };
-        NamePrediction prediction;
+        if (string.IsNullOrEmpty(PlayerName))
+        {
+            throw new ArgumentNullException(nameof(PlayerName), "PlayerName is null or empty in IsABot.");
+        }
 
+        if (predictionEngine == null)
+        {
+            throw new InvalidOperationException("predictionEngine is not initialized in IsABot.");
+        }
+
+        var PlayerNameData = new NameData { Name = PlayerName.Trim() };
+
+        NamePrediction prediction;
         lock (predictionLock)
         {
-            prediction = predictionEngine.Predict(sampleName);
+            prediction = predictionEngine.Predict(PlayerNameData);
         }
         return prediction.PredictedLabel;
     }
 
+
     private void OnUpdate()
     {
-        if(CheckIfMinimumTimeHasPassed(ref _minWaitToSave, 15000))
+        try
         {
-            SaveInvitedPlayers();
-        }
-        if (!PluginConfig.enableInvite) return;
-        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
-        if (Client is not { IsLoggedIn: true } || Condition[ConditionFlag.BoundByDuty]) return;
-        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
-        if (Objects is null) return;
-
-        for (var i = 0; i < Objects.Length; i++)
-        {
-            var gameObject = Objects.CreateObjectReference(Objects.GetObjectAddress(i));
-            if (gameObject is null || !gameObject.IsValid() || gameObject.ObjectKind != ObjectKind.Player) continue;
-            var player = gameObject as PlayerCharacter;
-            string worldName = player.CurrentWorld.GameData.Name.ToString();
-            var jobName = player.ClassJob.GameData.NameEnglish.ToString().Trim();
-            if (MLBotDetection(player.Name.TextValue) && (jobName.EqualsIgnoreCase("Archer") || jobName.EqualsIgnoreCase("Lancer") || jobName.EqualsIgnoreCase("Bard") || jobName.EqualsIgnoreCase("Marauder")))
+            if (CheckIfMinimumTimeHasPassed(ref _minWaitToSave, 15000))
             {
-                if (!HandlePlayerData(player.Name.TextValue.Trim(), worldName) && chatties != null)
-                {
-                    chatties.SendMessage("/void " + player.Name.TextValue.Trim() + " " + worldName + " Bot detected by ML");
-                    HandlePlayerData(player.Name.TextValue.Trim(), worldName, true);
-                }
-                continue;
+                SaveInvitedPlayers();
             }
-            //Don't invite people that are not from this World
-            if (player.HomeWorld.Id != Client.LocalPlayer.HomeWorld.Id) continue;
-            //Don't invite bots Archer/Bard/Unclassed
-            //if (!PluginConfig.checkBoxBardInvite)
-            //Don't invite people that are not sprouts
-            if (player.OnlineStatus.Id != 32) continue;
-            //Don't annoy people with double invites
-            if (_invitedPlayers.Contains(player.Name.TextValue.Trim())) continue;
-            //Only invite people in a certain range
-            if (!IsPlayerWithinDistance(gameObject, PluginConfig.sliderMaxInviteRange)) continue;
-            if (!CheckIfMinimumTimeHasPassed(ref _minWaitToCheck, PluginConfig.sliderTimeBetweenInvites)) continue;
-            SendNoviceInvite(player.Name.TextValue, (short)player.HomeWorld.Id);
-            _invitedPlayers.Add(player.Name.TextValue.Trim());
+
+            if (!PluginConfig.enableInvite) return;
+            if (Client == null || Condition == null || Objects == null) return;
+            if (Client is not { IsLoggedIn: true } || Condition[ConditionFlag.BoundByDuty]) return;
+
+            for (var i = 0; i < Objects.Length; i++)
+            {
+                var gameObject = Objects.CreateObjectReference(Objects.GetObjectAddress(i));
+                if (gameObject is null || !gameObject.IsValid() || gameObject.ObjectKind != ObjectKind.Player) continue;
+                var player = gameObject as PlayerCharacter;
+                if (player == null || player.CurrentWorld == null || player.ClassJob == null)
+                    continue;
+
+                string worldName = player.CurrentWorld.GameData.Name.ToString();
+                var jobName = player.ClassJob.GameData.NameEnglish.ToString();
+
+                bool botty;
+                try
+                {
+                    botty = IsABot(player.Name.TextValue);
+                }
+                catch (Exception ex)
+                {
+                    PluginLog.LogError(ex, $"Error determining if {player.Name.TextValue} is a bot.");
+                    continue; // Skip this player and continue with the next one
+                }
+
+                if (botty && chatties != null && (jobName.EqualsIgnoreCase("Archer") || jobName.EqualsIgnoreCase("Lancer") || jobName.EqualsIgnoreCase("Bard") || jobName.EqualsIgnoreCase("Marauder")))
+                {
+                    if (!HandlePlayerData(player.Name.TextValue.Trim(), worldName) && chatties != null)
+                    {
+                        chatties.SendMessage("/void " + player.Name.TextValue.Trim() + " " + worldName + " Bot detected by ML");
+                        HandlePlayerData(player.Name.TextValue.Trim(), worldName, true);
+                    }
+                }
+
+                if (botty) continue;
+                if (player.HomeWorld.Id != Client.LocalPlayer.HomeWorld.Id) continue;
+                if (player.OnlineStatus.Id != 32) continue;
+                if (_invitedPlayers is null || _invitedPlayers.Contains(player.Name.TextValue.Trim())) continue;
+                if (!IsPlayerWithinDistance(gameObject, PluginConfig.sliderMaxInviteRange)) continue;
+                if (!CheckIfMinimumTimeHasPassed(ref _minWaitToCheck, PluginConfig.sliderTimeBetweenInvites)) continue;
+                SendNoviceInvite(player.Name.TextValue, (short)player.HomeWorld.Id);
+                _invitedPlayers.Add(player.Name.TextValue.Trim());
+            }
+        }
+        catch (Exception ex)
+        {
+            PluginLog.LogError(ex, "Error during OnUpdate.");
         }
     }
+
 
     public void SetupCommands()
     {
