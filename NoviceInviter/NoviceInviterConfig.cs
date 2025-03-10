@@ -16,7 +16,7 @@ namespace NoviceInviter
         public bool checkBoxBardInvite = false;
         public bool sendInviteConfirmationOpen = false;
         public bool clearInviteConfirmationOpen = false;
-        public bool SendInviteBool { get; set; }
+        public bool sendInviteBool { get; set; }
 
         public void Init(NoviceInviter plugin)
         {
@@ -32,10 +32,11 @@ namespace NoviceInviter
         public bool DrawConfigUI()
 
         {
-
             var drawConfig = true;
 
             var windowFlags = ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse;
+
+            ImGui.GetForegroundDrawList();
 
             ImGui.SetNextWindowSize(new Vector2(500, 400), ImGuiCond.FirstUseEver);
 

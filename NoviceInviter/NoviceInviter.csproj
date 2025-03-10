@@ -25,9 +25,14 @@
 		<DebugType>none</DebugType>
 	</PropertyGroup>
 
+	<PropertyGroup>
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+	</PropertyGroup>
+
 	<ItemGroup>
-		<PackageReference Include="DalamudPackager" Version="2.1.12" />
-		<PackageReference Include="Lumina.Excel" Version="6.5.2" />
+		<PackageReference Include="DalamudPackager" Version="2.1.13" />
+		<PackageReference Include="Lumina.Excel" Version="7.0.1" />
+		<PackageReference Include="Microsoft.ML" Version="3.0.1" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -43,35 +48,11 @@
 			<EmbedInteropTypes></EmbedInteropTypes>
 			<Private>False</Private>
 		</Reference>
-		<Reference Include="Microsoft.ML">
-		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.dll</HintPath>
+		<Reference Include="Lumina">
+		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\addon\Hooks\dev\Lumina.dll</HintPath>
 		</Reference>
-		<Reference Include="Microsoft.ML.Core">
-		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.Core.dll</HintPath>
-		</Reference>
-		<Reference Include="Microsoft.ML.CpuMath">
-		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.CpuMath.dll</HintPath>
-		</Reference>
-		<Reference Include="Microsoft.ML.Data">
-		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.Data.dll</HintPath>
-		</Reference>
-		<Reference Include="Microsoft.ML.DataView">
-		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.DataView.dll</HintPath>
-		</Reference>
-		<Reference Include="Microsoft.ML.KMeansClustering">
-		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.KMeansClustering.dll</HintPath>
-		</Reference>
-		<Reference Include="Microsoft.ML.PCA">
-		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.PCA.dll</HintPath>
-		</Reference>
-		<Reference Include="Microsoft.ML.StandardTrainers">
-		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.StandardTrainers.dll</HintPath>
-		</Reference>
-		<Reference Include="Microsoft.ML.Transforms">
-		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\installedPlugins\NoSoliciting\3.0.10.0\Microsoft.ML.Transforms.dll</HintPath>
-		</Reference>
-		<Reference Include="System.Windows.Forms">
-			<HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\runtime\shared\Microsoft.WindowsDesktop.App\8.0.0\System.Windows.Forms.dll</HintPath>
+		<Reference Include="Lumina.Excel">
+		  <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\addon\Hooks\dev\Lumina.Excel.dll</HintPath>
 		</Reference>
 	</ItemGroup>
 </Project>

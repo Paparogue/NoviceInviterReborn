@@ -16,8 +16,8 @@ using Microsoft.ML;
 using System.Reflection;
 using ECommons;
 using ECommons.Automation;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.Rebar;
 using ECommons.GameHelpers;
+using ECommons.Logging;
 
 #pragma warning disable CA1816
 #pragma warning disable CS8602
@@ -29,7 +29,7 @@ public class NoviceInviter : IDalamudPlugin
     public string Name => "NoviceInviter";
     public NoviceInviterConfig PluginConfig { get; private set; }
 
-    private delegate char NoviceInviteDelegate(long a1, long a2, short worldID, IntPtr playerName, byte a3);
+    private delegate char NoviceInviteDelegate(IntPtr a1, IntPtr a2, short worldID, IntPtr playerName, byte a3);
 
     private readonly NoviceInviteDelegate _noviceInvite;
 
@@ -39,13 +39,15 @@ public class NoviceInviter : IDalamudPlugin
     private DateTime? _minWaitToSave = DateTime.UtcNow;
     private const string invitedPath = "C:\\Users\\Public\\player.inv";
 
-    public DalamudPluginInterface PluginInterface { get; init; }
+    public IDalamudPluginInterface PluginInterface { get; init; }
     public IClientState Client { get; init; }
     public ISigScanner SigScanner { get; init; }
     public IObjectTable Objects { get; init; }
     public ICommandManager CommandManager { get; init; }
     public ICondition Condition { get; init; }
     public IGameInteropProvider DalamudHook { get; init; }
+
+    public IPluginLog PluginLog { get; init; }
 
     private Chat chatties;
     public delegate void PlayerSearchDelegate(IntPtr globalFunction, IntPtr playerArray, uint always0xA);
@@ -70,18 +72,20 @@ public class NoviceInviter : IDalamudPlugin
 
     public void PlayerSearchClear()
     {
+        /*
         StringBuilder csvContent = new StringBuilder();
         foreach (var player in _playerSearchList)
         {
             csvContent.AppendLine($"{player},0");
         }
         System.Windows.Forms.Clipboard.SetText(csvContent.ToString());
+        */
         _playerSearchList.Clear();
     }
 
     private void PlayerSearchDetour(IntPtr globalFunction, IntPtr playerArray, uint always0xA)
     {
-        IntPtr playerArrayBeginning = playerArray + 0x3C;
+        IntPtr playerArrayBeginning = playerArray + 0x44;
         for (int i = 0; i < 10; i++)
         {
             var playerData = Marshal.PtrToStructure<PlayerSearch.PlayerData>(playerArrayBeginning);
@@ -95,7 +99,7 @@ public class NoviceInviter : IDalamudPlugin
                 break;
             }
 
-            playerArrayBeginning += 0x68;
+            playerArrayBeginning += 0x70;
         }
 
         PlayerSearchHook.Original(globalFunction, playerArray, always0xA);
@@ -103,22 +107,24 @@ public class NoviceInviter : IDalamudPlugin
 
     public void SendPlayerSearchInvites()
     {
-        if (_isActive)
-        {
+        if (_isActive || Client.LocalPlayer is null)
             return;
-        }
+
         _isActive = true;
+
         try
         {
             foreach (var player in _playerSearchList)
             {
                 if (_invitedPlayers.Contains(player.Trim()) || IsABot(player))
-                {
                     continue;
-                }
-                SendNoviceInvite(player, (short)Client.LocalPlayer.CurrentWorld.Id);
+
+                var playerAddress = Client.LocalPlayer.Address+0x2268;
+                var playerWorld = Marshal.ReadInt16(playerAddress);
+                SendNoviceInvite(player, playerWorld);
+                //SendNoviceInvite(player, (short)402); //402 is alpha und 403 is raiden
                 _invitedPlayers.Add(player.Trim());
-                Thread.Sleep(200);
+                Thread.Sleep(100);
             }
 
             _playerSearchList.Clear();
@@ -143,13 +149,14 @@ public class NoviceInviter : IDalamudPlugin
     }
 
     public NoviceInviter(
-        [RequiredVersion("1.0")] DalamudPluginInterface pluginInterface,
-        [RequiredVersion("1.0")] IClientState client,
-        [RequiredVersion("1.0")] ISigScanner sigScanner,
-        [RequiredVersion("1.0")] IObjectTable objects,
-        [RequiredVersion("1.0")] ICommandManager commandManager,
-        [RequiredVersion("1.0")] IGameInteropProvider dalamudHook,
-        [RequiredVersion("1.0")] ICondition condition
+        IDalamudPluginInterface pluginInterface,
+        IClientState client,
+        ISigScanner sigScanner,
+        IObjectTable objects,
+        ICommandManager commandManager,
+        IGameInteropProvider dalamudHook,
+        ICondition condition,
+        IPluginLog pluginLog
     )
     {
         //SetupAssemblyResolving();
@@ -160,18 +167,22 @@ public class NoviceInviter : IDalamudPlugin
         Objects = objects;
         CommandManager = commandManager;
         Condition = condition;
-
+        PluginLog = pluginLog;
         PluginConfig = PluginInterface.GetPluginConfig() as NoviceInviterConfig ?? new NoviceInviterConfig();
         PluginConfig.Init(this);
         SetupCommands();
         LoadInvitedPlayers();
-        ECommonsMain.Init(PluginInterface, this);
-        chatties = new Chat();
+        //ECommonsMain.Init(pluginInterface, this, null);
+        //chatties = new Chat();
 
-        var noviceSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? EB A8 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 48 89 5C 24");
+        //var noviceSigPtr = SigScanner.ScanText("C6 44 24 20 08 45 0F B7 C6 48 8B D6 48 8B CF E8")+0xF;
+        var noviceSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? EB 40 41 B1 09");
+        //var noviceSigPtrx = SigScanner.ScanText("E8 ?? ?? ?? ?? BA 0C 00 00 00 48 8D 0D");
+        //PluginLog.Warning($"noviceInviteSig: 0x{noviceSigPtr:X}");
+        //PluginLog.Warning($"Test: 0x{noviceSigPtrx:X}");
         _noviceInvite = Marshal.GetDelegateForFunctionPointer<NoviceInviteDelegate>(noviceSigPtr);
 
-        var playerSearchSigPtr = SigScanner.ScanText("40 56 57 41 54 41 55 41 57 48 83 EC 30");
+        var playerSearchSigPtr = SigScanner.ScanText("40 56 57 41 54 41 55 41 56 48 83 EC 40");
         if (playerSearchSigPtr != IntPtr.Zero)
         {
             PlayerSearchHook = DalamudHook.HookFromAddress<PlayerSearchDelegate>(playerSearchSigPtr, PlayerSearchDetour);
@@ -189,17 +200,37 @@ public class NoviceInviter : IDalamudPlugin
         PluginInterface.UiBuilder.Draw += OnUpdate;
     }
 
-    private void SendNoviceInvite(string playerName, short playerWorldID)
+    private unsafe void SendNoviceInvite(string playerName, short playerWorldID)
     {
-        var playerNamePtr = Marshal.StringToHGlobalAnsi(playerName);
-        _noviceInvite(
-            0x0,
-            0x0,
-            playerWorldID,
-            playerNamePtr,
-            0x8);
+        try
+        {
+            PluginLog.Debug($"Attempting to send novice invite to {playerName} (World ID: {playerWorldID})");
 
-        Marshal.FreeHGlobal(playerNamePtr);
+            if (_noviceInvite == null)
+            {
+                PluginLog.Error("NoviceInvite function pointer is null");
+                return;
+            }
+
+            byte[] playerNameBytes = Encoding.UTF8.GetBytes(playerName + "\0");
+            fixed (byte* playerNamePtr = playerNameBytes)
+            {
+                PluginLog.Debug($"Calling _noviceInvite function");
+                char result = _noviceInvite(
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    playerWorldID,
+                    (IntPtr)playerNamePtr,
+                    8);
+                PluginLog.Debug($"_noviceInvite function returned: {result}");
+            }
+
+            PluginLog.Debug($"Successfully sent novice invite to {playerName}");
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error(ex, $"Error in SendNoviceInvite for player {playerName}");
+        }
     }
 
     private bool CheckIfMinimumTimeHasPassed(ref DateTime? lastTimeCalled, int timeBetween)
@@ -216,7 +247,7 @@ public class NoviceInviter : IDalamudPlugin
 
     public void Dispose()
     {
-        ECommonsMain.Dispose();
+        //ECommonsMain.Dispose();
         PlayerSearchHook.Disable();
         PlayerSearchHook.Dispose();
         PluginInterface.UiBuilder.Draw -= BuildUI;
@@ -225,7 +256,7 @@ public class NoviceInviter : IDalamudPlugin
         RemoveCommands();
     }
 
-    private bool IsPlayerWithinDistance(GameObject player, float distance)
+    private bool IsPlayerWithinDistance(IGameObject player, float distance)
     {
         var localPlayer = Client.LocalPlayer.Position;
         var playerPosition = player.Position;
@@ -326,7 +357,7 @@ public class NoviceInviter : IDalamudPlugin
             {
                 SaveInvitedPlayers();
             }
-
+            /*
             if (!PluginConfig.enableInvite) return;
             if (Client == null || Condition == null || Objects == null) return;
             if (Client is not { IsLoggedIn: true } || Condition[ConditionFlag.BoundByDuty]) return;
@@ -335,13 +366,12 @@ public class NoviceInviter : IDalamudPlugin
             {
                 var gameObject = Objects.CreateObjectReference(Objects.GetObjectAddress(i));
                 if (gameObject is null || !gameObject.IsValid() || gameObject.ObjectKind != ObjectKind.Player) continue;
-                var player = gameObject as PlayerCharacter;
-                if (player == null || player.CurrentWorld == null || player.ClassJob == null)
+                IPlayerCharacter? player = gameObject as IPlayerCharacter;
+                if (player == null)
                     continue;
 
                 string worldName = player.CurrentWorld.GameData.Name.ToString();
                 var jobName = player.ClassJob.GameData.NameEnglish.ToString();
-
                 bool botty;
                 try
                 {
@@ -349,7 +379,6 @@ public class NoviceInviter : IDalamudPlugin
                 }
                 catch (Exception ex)
                 {
-                    PluginLog.LogError(ex, $"Error determining if {player.Name.TextValue} is a bot.");
                     continue; // Skip this player and continue with the next one
                 }
 
@@ -370,11 +399,11 @@ public class NoviceInviter : IDalamudPlugin
                 if (!CheckIfMinimumTimeHasPassed(ref _minWaitToCheck, PluginConfig.sliderTimeBetweenInvites)) continue;
                 SendNoviceInvite(player.Name.TextValue, (short)player.HomeWorld.Id);
                 _invitedPlayers.Add(player.Name.TextValue.Trim());
-            }
+        }*/
         }
         catch (Exception ex)
         {
-            PluginLog.LogError(ex, "Error during OnUpdate.");
+            PluginLog.Error(ex, "Error during OnUpdate.");
         }
     }
 
