@@ -19,6 +19,7 @@ using ECommons;
 using ECommons.Automation;
 using ECommons.GameHelpers;
 using ECommons.Logging;
+using static NoviceInviter.PlayerSearch;
 
 #pragma warning disable CA1816
 #pragma warning disable CS8602
@@ -86,12 +87,11 @@ public class NoviceInviter : IDalamudPlugin
         LoadInvitedPlayers();
         ECommonsMain.Init(pluginInterface, this, ECommons.Module.All);
         chatties = new Chat();
-        //var OLD_noviceSigPtr = SigScanner.ScanText("C6 44 24 20 08 45 0F B7 C6 48 8B D6 48 8B CF E8")+0xF;
         var noviceSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? EB 40 41 B1 09");
         //var OLD_noviceSigPtrx = SigScanner.ScanText("E8 ?? ?? ?? ?? BA 0C 00 00 00 48 8D 0D");
         _noviceInvite = Marshal.GetDelegateForFunctionPointer<NoviceInviteDelegate>(noviceSigPtr);
 
-        var playerSearchSigPtr = SigScanner.ScanText("40 56 57 41 54 41 55 41 56 48 83 EC 40");
+        var playerSearchSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? 49 8B 4F ?? 48 8B 01 FF 50 ?? 41 0F B6 97");
         if (playerSearchSigPtr != IntPtr.Zero)
         {
             PlayerSearchHook = DalamudHook.HookFromAddress<PlayerSearchDelegate>(playerSearchSigPtr, PlayerSearchDetour);
@@ -149,10 +149,10 @@ public class NoviceInviter : IDalamudPlugin
         for (int i = 0; i < 10; i++)
         {
             var playerData = Marshal.PtrToStructure<PlayerSearch.PlayerData>(playerArrayBeginning);
-
             if (IsValidPlayerName(playerData.PlayerName))
             {
-                _playerSearchList.Add(playerData.PlayerName.Trim());
+                PluginLog.Warning(playerData.PlayerName);
+                //_playerSearchList.Add(playerData.PlayerName.Trim());
             }
             else
             {
@@ -176,14 +176,15 @@ public class NoviceInviter : IDalamudPlugin
         {
             foreach (var player in _playerSearchList)
             {
-                if (_invitedPlayers.Contains(player.Trim()) || IsABot(player))
+                string worldName = Client.LocalPlayer.CurrentWorld.Value.Name.ToString();
+                if (_invitedPlayers.Contains(player.Trim() + "-" + worldName) || IsABot(player))
                     continue;
 
-                var playerAddress = Client.LocalPlayer.Address + 0x2268;
-                var playerWorld = Marshal.ReadInt16(playerAddress);
-                SendNoviceInvite(player, playerWorld);
-                //SendNoviceInvite(player, (short)Client.LocalPlayer.CurrentWorld.RowId);
-                _invitedPlayers.Add(player.Trim());
+                //var playerAddress = Client.LocalPlayer.Address + 0x2268;
+                //var playerWorld = Marshal.ReadInt16(playerAddress);
+                //SendNoviceInvite(player, playerWorld);
+                SendNoviceInvite(player, (short)Client.LocalPlayer.CurrentWorld.RowId);
+                _invitedPlayers.Add(player.Trim() + "-" + worldName);
                 Thread.Sleep(200);
             }
 
@@ -296,33 +297,6 @@ public class NoviceInviter : IDalamudPlugin
         }
     }
 
-    public static bool HandlePlayerData(string playerName, string server, bool saveToFile = false)
-    {
-        string filePath = @"C:\Users\Public\bots.txt";
-        Directory.CreateDirectory(Path.GetDirectoryName(filePath));
-        if (!File.Exists(filePath))
-        {
-            File.Create(filePath).Close();
-        }
-        List<string> lines = new List<string>(File.ReadAllLines(filePath));
-        string newEntry = $"{playerName},{server}";
-
-        if (saveToFile)
-        {
-            if (!lines.Contains(newEntry))
-            {
-                File.AppendAllText(filePath, newEntry + Environment.NewLine);
-                return false;
-            }
-            return true;
-        }
-        else
-        {
-            return lines.Contains(newEntry);
-        }
-    }
-
-
     public bool IsABot(string PlayerName)
     {
         if (string.IsNullOrEmpty(PlayerName))
@@ -373,14 +347,8 @@ public class NoviceInviter : IDalamudPlugin
                     continue; // Skip this player and continue with the next one
                 }
 
-                if (botty && chatties != null && (jobName.EqualsIgnoreCase("Archer") || jobName.EqualsIgnoreCase("Lancer") || jobName.EqualsIgnoreCase("Bard") || jobName.EqualsIgnoreCase("Marauder")))
-                {
-                    if (!HandlePlayerData(player.Name.TextValue.Trim(), worldName) && chatties != null)
-                    {
-                        //chatties.SendMessage("/void " + player.Name.TextValue.Trim() + " " + worldName + " Bot detected by ML");
-                        //HandlePlayerData(player.Name.TextValue.Trim(), worldName, true);
-                    }
-                }*/
+                if (jobName.EqualsIgnoreCase("Archer") || jobName.EqualsIgnoreCase("Lancer") || jobName.EqualsIgnoreCase("Bard") || jobName.EqualsIgnoreCase("Marauder")))
+                */
 
                 //is considered a bot
                 if (botty) continue;
@@ -389,7 +357,7 @@ public class NoviceInviter : IDalamudPlugin
                 //is a sprout
                 if (player.OnlineStatus.RowId != 32) continue;
                 //was not already invited
-                if (_invitedPlayers is null || _invitedPlayers.Contains(player.Name.TextValue.Trim())) continue;
+                if (_invitedPlayers is null || _invitedPlayers.Contains(player.Name.TextValue.Trim() + "-" + worldName)) continue;
                 //is within distance
                 if (!IsPlayerWithinDistance(o, PluginConfig.sliderMaxInviteRange)) continue;
                 //enough time passed between invite
@@ -397,7 +365,7 @@ public class NoviceInviter : IDalamudPlugin
                 //invite player
                 SendNoviceInvite(player.Name.TextValue, (short)player.HomeWorld.RowId);
                 //dont invite them twice
-                _invitedPlayers.Add(player.Name.TextValue.Trim());
+                _invitedPlayers.Add(player.Name.TextValue.Trim() + "-" + worldName);
             }
         }
         catch (Exception ex)
