@@ -16,6 +16,7 @@ using Microsoft.ML;
 using System.Reflection;
 using Lumina.Excel;
 using static NoviceInviterReborn.PlayerSearch;
+using Newtonsoft.Json.Bson;
 
 #pragma warning disable CA1816
 #pragma warning disable CS8602
@@ -24,18 +25,17 @@ namespace NoviceInviterReborn;
 
 public class NoviceInviterReborn : IDalamudPlugin
 {
-    public string Name => "NoviceInviter";
+    public string Name => "NoviceInviterReborn";
     public NoviceInviterConfig PluginConfig { get; private set; }
 
     private delegate char NoviceInviteDelegate(IntPtr a1, IntPtr a2, short worldID, IntPtr playerName, byte a3);
 
-    private readonly NoviceInviteDelegate _noviceInvite;
-
+    private NoviceInviteDelegate _noviceInvite;
     private bool drawConfigWindow;
     private readonly List<string> _invitedPlayers = new();
     private DateTime? _minWaitToCheck = DateTime.UtcNow;
     private DateTime? _minWaitToSave = DateTime.UtcNow;
-    private const string invitedPath = "C:\\Users\\Public\\player.inv";
+    private string invitedPath;
 
     public IDalamudPluginInterface PluginInterface { get; init; }
     public IClientState Client { get; init; }
@@ -78,25 +78,11 @@ public class NoviceInviterReborn : IDalamudPlugin
         PluginLog = pluginLog;
         PluginConfig = PluginInterface.GetPluginConfig() as NoviceInviterConfig ?? new NoviceInviterConfig();
         PluginConfig.Init(this);
+        invitedPath = Path.Combine(PluginInterface.GetPluginConfigDirectory(), "player.inv");
         SetupCommands();
         LoadInvitedPlayers();
-        var noviceSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? EB 40 41 B1 09");
-        //var OLD_noviceSigPtrx = SigScanner.ScanText("E8 ?? ?? ?? ?? BA 0C 00 00 00 48 8D 0D");
-        _noviceInvite = Marshal.GetDelegateForFunctionPointer<NoviceInviteDelegate>(noviceSigPtr);
-
-        var playerSearchSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? 49 8B 4F ?? 48 8B 01 FF 50 ?? 41 0F B6 97");
-        if (playerSearchSigPtr != IntPtr.Zero)
-        {
-            PlayerSearchHook = DalamudHook.HookFromAddress<PlayerSearchDelegate>(playerSearchSigPtr, PlayerSearchDetour);
-            PlayerSearchHook.Enable();
-        }
-        /*string modelPath = @"C:\Users\AdminPC\source\repos\NoviceInviter2\NoviceInviter\model.zip";
-        mlContext = new MLContext();
-        using (var fileStream = new FileStream(modelPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-        {
-            trainedModel = mlContext.Model.Load(fileStream, out modelSchema);
-        }*/
-        //predictionEngine = mlContext.Model.CreatePredictionEngine<NameData, NamePrediction>(trainedModel);
+        InitHooknSigs();
+        InitML();
         PluginInterface.UiBuilder.Draw += BuildUI;
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
         PluginInterface.UiBuilder.OpenMainUi += OpenConfigUi;
@@ -114,6 +100,68 @@ public class NoviceInviterReborn : IDalamudPlugin
         RemoveCommands();
     }
 
+    private void InitHooknSigs()
+    {
+        var noviceSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? EB 40 41 B1 09");
+        _noviceInvite = Marshal.GetDelegateForFunctionPointer<NoviceInviteDelegate>(noviceSigPtr);
+        var playerSearchSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? 49 8B 4F ?? 48 8B 01 FF 50 ?? 41 0F B6 97");
+        if (playerSearchSigPtr != IntPtr.Zero)
+        {
+            PlayerSearchHook = DalamudHook.HookFromAddress<PlayerSearchDelegate>(playerSearchSigPtr, PlayerSearchDetour);
+            PlayerSearchHook.Enable();
+        }
+    }
+
+    private void InitML()
+    {
+        string modelUrl = "https://raw.githubusercontent.com/Paparogue/NoviceInviterReborn/refs/heads/master/DetectionModel/model.zip";
+        string modelPath = Path.Combine(PluginInterface.GetPluginConfigDirectory(), "model.zip");
+        if (!File.Exists(modelPath))
+        {
+            try
+            {
+                PluginLog.Information($"Downloading model from {modelUrl}");
+
+                using (var httpClient = new HttpClient())
+                {
+                    using (var response = httpClient.GetAsync(modelUrl).Result)
+                    {
+                        if (response.IsSuccessStatusCode)
+                        {
+                            using (var fileStream = new FileStream(modelPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                            {
+                                response.Content.CopyToAsync(fileStream).Wait();
+                            }
+                            PluginLog.Information($"Model downloaded to {modelPath}");
+                        }
+                        else
+                        {
+                            PluginLog.Error($"Failed to download model: HTTP status code {response.StatusCode}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error($"Failed to download model: {ex.Message}");
+            }
+        }
+
+        mlContext = new MLContext();
+        try
+        {
+            using (var fileStream = new FileStream(modelPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                trainedModel = mlContext.Model.Load(fileStream, out modelSchema);
+            }
+            predictionEngine = mlContext.Model.CreatePredictionEngine<NameData, NamePrediction>(trainedModel);
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error($"Failed to load model: {ex.Message}");
+        }
+    }
+
     public int InvitedPlayersAmount()
     {
         return _invitedPlayers.Count;
@@ -126,14 +174,6 @@ public class NoviceInviterReborn : IDalamudPlugin
 
     public void PlayerSearchClear()
     {
-        /*
-        StringBuilder csvContent = new StringBuilder();
-        foreach (var player in _playerSearchList)
-        {
-            csvContent.AppendLine($"{player},0");
-        }
-        System.Windows.Forms.Clipboard.SetText(csvContent.ToString());
-        */
         _playerSearchList.Clear();
     }
 
@@ -171,7 +211,7 @@ public class NoviceInviterReborn : IDalamudPlugin
             foreach (var player in _playerSearchList)
             {
                 string worldName = Client.LocalPlayer.CurrentWorld.Value.Name.ToString();
-                if (_invitedPlayers.Contains(player.Trim() + "-" + worldName) || IsABot(player))
+                if (_invitedPlayers.Contains(player.Trim() + "-" + worldName))
                     continue;
 
                 //var playerAddress = Client.LocalPlayer.Address + 0x2268;
@@ -333,7 +373,8 @@ public class NoviceInviterReborn : IDalamudPlugin
                 string worldName = player.CurrentWorld.Value.Name.ToString();
                 var jobName = player.ClassJob.Value.NameEnglish.ToString();
                 bool botty = false;
-                /*try
+
+                try
                 {
                     botty = IsABot(player.Name.TextValue);
                 }
@@ -342,11 +383,15 @@ public class NoviceInviterReborn : IDalamudPlugin
                     continue; // Skip this player and continue with the next one
                 }
 
-                if (jobName.EqualsIgnoreCase("Archer") || jobName.EqualsIgnoreCase("Lancer") || jobName.EqualsIgnoreCase("Bard") || jobName.EqualsIgnoreCase("Marauder")))
-                */
+                //temp disabled needs new training
+                //if (botty) continue;
+                //anti bot
+                if (player.Level < 5) continue;
 
-                //is considered a bot
-                if (botty) continue;
+                if (!PluginConfig.checkBoxDoNotInvite)
+                    if (jobName.Equals("Archer") || jobName.Equals("Lancer") || jobName.Equals("Bard") || jobName.Equals("Marauder"))
+                        continue;
+
                 //is from different world
                 if (player.CurrentWorld.Value.RowId != Client.LocalPlayer.CurrentWorld.RowId) continue;
                 //is a sprout
@@ -358,7 +403,7 @@ public class NoviceInviterReborn : IDalamudPlugin
                 //enough time passed between invite
                 if (!CheckIfMinimumTimeHasPassed(ref _minWaitToCheck, PluginConfig.sliderTimeBetweenInvites)) continue;
                 //invite player
-                SendNoviceInvite(player.Name.TextValue, (short)player.HomeWorld.RowId);
+                //SendNoviceInvite(player.Name.TextValue, (short)player.HomeWorld.RowId);
                 //dont invite them twice
                 _invitedPlayers.Add(player.Name.TextValue.Trim() + "-" + worldName);
             }
@@ -372,7 +417,7 @@ public class NoviceInviterReborn : IDalamudPlugin
 
     public void SetupCommands()
     {
-        CommandManager.AddHandler("/noviceinviter", new CommandInfo(OnConfigCommandHandler)
+        CommandManager.AddHandler("/nir", new CommandInfo(OnConfigCommandHandler)
         {
             HelpMessage = $"Opens the config window for {Name}.",
             ShowInHelp = true
@@ -391,7 +436,7 @@ public class NoviceInviterReborn : IDalamudPlugin
 
     public void RemoveCommands()
     {
-        CommandManager.RemoveHandler("/noviceinviter");
+        CommandManager.RemoveHandler("/nir");
     }
 
     private void BuildUI()

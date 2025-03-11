@@ -11,9 +11,9 @@ namespace NoviceInviterReborn
         [NonSerialized] private NoviceInviterReborn plugin;
 
         public bool enableInvite = false;
-        public float sliderMaxInviteRange = 100.0f;
+        public float sliderMaxInviteRange = 200.0f;
         public int sliderTimeBetweenInvites = 500;
-        public bool checkBoxBardInvite = false;
+        public bool checkBoxDoNotInvite = false;
         public bool sendInviteConfirmationOpen = false;
         public bool clearInviteConfirmationOpen = false;
         public bool sendInviteBool { get; set; }
@@ -43,10 +43,6 @@ namespace NoviceInviterReborn
             ImGui.Begin($"{plugin.Name} UI", ref drawConfig, windowFlags);
 
             var changed = false;
-
-            ImGui.Text("Novice Inviter Plugin Settings");
-
-            ImGui.Separator();
 
             ImGui.PushStyleColor(ImGuiCol.Text, 0xFFAAAAAA);
 
@@ -108,15 +104,7 @@ namespace NoviceInviterReborn
 
             ImGui.Indent(10);
 
-            changed |= ImGui.Checkbox("Do you want to invite Archer/Bard? (Possible Bots)", ref checkBoxBardInvite);
-
-            if (ImGui.IsItemHovered())
-
-            {
-
-                ImGui.SetTooltip("Check to invite Archer/Bard bots");
-
-            }
+            changed |= ImGui.Checkbox("Do you want to invite possible Bot Jobs? (Not recommended)", ref checkBoxDoNotInvite);
 
             ImGui.Separator();
             ImGui.Text($"Total players invited: {plugin.InvitedPlayersAmount()}");
