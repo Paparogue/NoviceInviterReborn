@@ -15,18 +15,14 @@ using System.Text;
 using Microsoft.ML;
 using System.Reflection;
 using Lumina.Excel;
-using ECommons;
-using ECommons.Automation;
-using ECommons.GameHelpers;
-using ECommons.Logging;
-using static NoviceInviter.PlayerSearch;
+using static NoviceInviterReborn.PlayerSearch;
 
 #pragma warning disable CA1816
 #pragma warning disable CS8602
 
-namespace NoviceInviter;
+namespace NoviceInviterReborn;
 
-public class NoviceInviter : IDalamudPlugin
+public class NoviceInviterReborn : IDalamudPlugin
 {
     public string Name => "NoviceInviter";
     public NoviceInviterConfig PluginConfig { get; private set; }
@@ -51,7 +47,6 @@ public class NoviceInviter : IDalamudPlugin
 
     public IPluginLog PluginLog { get; init; }
 
-    private Chat chatties;
     public delegate void PlayerSearchDelegate(IntPtr globalFunction, IntPtr playerArray, uint always0xA);
     private Hook<PlayerSearchDelegate> PlayerSearchHook = null;
     private List<String> _playerSearchList = new List<String>();
@@ -62,7 +57,7 @@ public class NoviceInviter : IDalamudPlugin
     private DataViewSchema modelSchema;
     PredictionEngine<NameData, NamePrediction> predictionEngine;
 
-    public NoviceInviter(
+    public NoviceInviterReborn(
         IDalamudPluginInterface pluginInterface,
         IClientState client,
         ISigScanner sigScanner,
@@ -85,8 +80,6 @@ public class NoviceInviter : IDalamudPlugin
         PluginConfig.Init(this);
         SetupCommands();
         LoadInvitedPlayers();
-        ECommonsMain.Init(pluginInterface, this, ECommons.Module.All);
-        chatties = new Chat();
         var noviceSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? EB 40 41 B1 09");
         //var OLD_noviceSigPtrx = SigScanner.ScanText("E8 ?? ?? ?? ?? BA 0C 00 00 00 48 8D 0D");
         _noviceInvite = Marshal.GetDelegateForFunctionPointer<NoviceInviteDelegate>(noviceSigPtr);
@@ -106,16 +99,17 @@ public class NoviceInviter : IDalamudPlugin
         //predictionEngine = mlContext.Model.CreatePredictionEngine<NameData, NamePrediction>(trainedModel);
         PluginInterface.UiBuilder.Draw += BuildUI;
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
+        PluginInterface.UiBuilder.OpenMainUi += OpenConfigUi;
         PluginInterface.UiBuilder.Draw += OnUpdate;
     }
 
     public void Dispose()
     {
-        ECommonsMain.Dispose();
         PlayerSearchHook.Disable();
         PlayerSearchHook.Dispose();
         PluginInterface.UiBuilder.Draw -= BuildUI;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
+        PluginInterface.UiBuilder.OpenMainUi -= OpenConfigUi;
         PluginInterface.UiBuilder.Draw -= OnUpdate;
         RemoveCommands();
     }
@@ -324,11 +318,12 @@ public class NoviceInviter : IDalamudPlugin
     {
         try
         {
+            if (Client == null || Condition == null || Objects == null) return;
+
             if (CheckIfMinimumTimeHasPassed(ref _minWaitToSave, 15000))
                 SaveInvitedPlayers();
             
             if (!PluginConfig.enableInvite) return;
-            if (Client == null || Condition == null || Objects == null) return;
             if (Client is not { IsLoggedIn: true } || Condition[ConditionFlag.BoundByDuty]) return;
 
             foreach (var o in Objects)

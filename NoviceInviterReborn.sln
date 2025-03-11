@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.6.33829.357
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoviceInviter", "NoviceInviter\NoviceInviter.csproj", "{058342BA-F249-472B-B63F-7B080DA47E90}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoviceInviterReborn", "NoviceInviterReborn\NoviceInviterReborn.csproj", "{058342BA-F249-472B-B63F-7B080DA47E90}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

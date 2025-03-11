@@ -2,13 +2,13 @@
 using Dalamud.Configuration;
 using ImGuiNET;
 
-namespace NoviceInviter
+namespace NoviceInviterReborn
 {
     public class NoviceInviterConfig : IPluginConfiguration
     {
         public int Version { get; set; }
 
-        [NonSerialized] private NoviceInviter plugin;
+        [NonSerialized] private NoviceInviterReborn plugin;
 
         public bool enableInvite = false;
         public float sliderMaxInviteRange = 100.0f;
@@ -18,7 +18,7 @@ namespace NoviceInviter
         public bool clearInviteConfirmationOpen = false;
         public bool sendInviteBool { get; set; }
 
-        public void Init(NoviceInviter plugin)
+        public void Init(NoviceInviterReborn plugin)
         {
             this.plugin = plugin;
         }

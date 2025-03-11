@@ -1,6 +1,6 @@
 ﻿using Microsoft.ML.Data;
 
-namespace NoviceInviter
+namespace NoviceInviterReborn
 {
     public class NameData
     {
