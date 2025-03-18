@@ -17,6 +17,11 @@ using System.Reflection;
 using Lumina.Excel;
 using static NoviceInviterReborn.PlayerSearch;
 using Newtonsoft.Json.Bson;
+using System.Runtime.CompilerServices;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using System.Runtime.Intrinsics.X86;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using FFXIVClientStructs.FFXIV.Client.UI;
 
 #pragma warning disable CA1816
 #pragma warning disable CS8602
@@ -29,8 +34,10 @@ public class NoviceInviterReborn : IDalamudPlugin
     public NoviceInviterConfig PluginConfig { get; private set; }
 
     private delegate char NoviceInviteDelegate(IntPtr a1, IntPtr a2, short worldID, IntPtr playerName, byte a3);
+    private delegate char ExecuteSearchDelegate(IntPtr a1, IntPtr a2, byte a3);
 
     private NoviceInviteDelegate _noviceInvite;
+    private ExecuteSearchDelegate _executeSearch;
     private bool drawConfigWindow;
     private readonly List<string> _invitedPlayers = new();
     private DateTime? _minWaitToCheck = DateTime.UtcNow;
@@ -48,6 +55,7 @@ public class NoviceInviterReborn : IDalamudPlugin
     public IPluginLog PluginLog { get; init; }
 
     public delegate void PlayerSearchDelegate(IntPtr globalFunction, IntPtr playerArray, uint always0xA);
+    public delegate void ExecuteSearchBaseDelegate(IntPtr a1, float a2);
     private Hook<PlayerSearchDelegate> PlayerSearchHook = null;
     private List<String> _playerSearchList = new List<String>();
     private static readonly object predictionLock = new object();
@@ -57,7 +65,10 @@ public class NoviceInviterReborn : IDalamudPlugin
     private DataViewSchema modelSchema;
     PredictionEngine<NameData, NamePrediction> predictionEngine;
 
-    public NoviceInviterReborn(
+
+    //execute search E8 ?? ?? ?? ?? 48 8D 4C 24 ?? 41 C7 07 ?? ?? ?? ?? 41 C6 47
+
+    public unsafe NoviceInviterReborn(
         IDalamudPluginInterface pluginInterface,
         IClientState client,
         ISigScanner sigScanner,
@@ -104,12 +115,16 @@ public class NoviceInviterReborn : IDalamudPlugin
     {
         var noviceSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? EB 40 41 B1 09");
         _noviceInvite = Marshal.GetDelegateForFunctionPointer<NoviceInviteDelegate>(noviceSigPtr);
+
         var playerSearchSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? 49 8B 4F ?? 48 8B 01 FF 50 ?? 41 0F B6 97");
         if (playerSearchSigPtr != IntPtr.Zero)
         {
             PlayerSearchHook = DalamudHook.HookFromAddress<PlayerSearchDelegate>(playerSearchSigPtr, PlayerSearchDetour);
             PlayerSearchHook.Enable();
         }
+
+        var executeSearchPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? 48 8D 4C 24 ?? 41 C7 07 ?? ?? ?? ?? 41 C6 47");
+        _executeSearch = Marshal.GetDelegateForFunctionPointer<ExecuteSearchDelegate>(executeSearchPtr);
     }
 
     private void InitML()
@@ -185,8 +200,7 @@ public class NoviceInviterReborn : IDalamudPlugin
             var playerData = Marshal.PtrToStructure<PlayerSearch.PlayerData>(playerArrayBeginning);
             if (IsValidPlayerName(playerData.PlayerName))
             {
-                PluginLog.Warning(playerData.PlayerName);
-                //_playerSearchList.Add(playerData.PlayerName.Trim());
+                _playerSearchList.Add(playerData.PlayerName.Trim());
             }
             else
             {
@@ -214,9 +228,6 @@ public class NoviceInviterReborn : IDalamudPlugin
                 if (_invitedPlayers.Contains(player.Trim() + "-" + worldName))
                     continue;
 
-                //var playerAddress = Client.LocalPlayer.Address + 0x2268;
-                //var playerWorld = Marshal.ReadInt16(playerAddress);
-                //SendNoviceInvite(player, playerWorld);
                 SendNoviceInvite(player, (short)Client.LocalPlayer.CurrentWorld.RowId);
                 _invitedPlayers.Add(player.Trim() + "-" + worldName);
                 Thread.Sleep(200);
@@ -241,6 +252,14 @@ public class NoviceInviterReborn : IDalamudPlugin
                 return false;
         }
         return true;
+    }
+
+    public unsafe void SendExecuteSearch()
+    {
+        var moduleInstance = FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentModule.Instance();
+        IntPtr agent = (IntPtr)moduleInstance->GetAgentByInternalId(AgentId.Search);
+       _executeSearch(agent, agent + 0x48, 0);
+        PluginLog.Information($"Agent: 0x{((IntPtr)agent).ToInt64():X}");
     }
 
     private unsafe void SendNoviceInvite(string playerName, short playerWorldID)
@@ -354,7 +373,7 @@ public class NoviceInviterReborn : IDalamudPlugin
     }
 
 
-    private void OnUpdate()
+    private unsafe void OnUpdate()
     {
         try
         {
@@ -385,6 +404,7 @@ public class NoviceInviterReborn : IDalamudPlugin
 
                 //temp disabled needs new training
                 //if (botty) continue;
+
                 //anti bot
                 if (player.Level < 5) continue;
 
@@ -403,7 +423,7 @@ public class NoviceInviterReborn : IDalamudPlugin
                 //enough time passed between invite
                 if (!CheckIfMinimumTimeHasPassed(ref _minWaitToCheck, PluginConfig.sliderTimeBetweenInvites)) continue;
                 //invite player
-                //SendNoviceInvite(player.Name.TextValue, (short)player.HomeWorld.RowId);
+                SendNoviceInvite(player.Name.TextValue, (short)player.HomeWorld.RowId);
                 //dont invite them twice
                 _invitedPlayers.Add(player.Name.TextValue.Trim() + "-" + worldName);
             }

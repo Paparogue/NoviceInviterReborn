@@ -151,7 +151,8 @@ namespace NoviceInviterReborn
 
                 if (ImGui.Button("Yes"))
                 {
-                    Task.Run(() => plugin.SendPlayerSearchInvites());
+                    //Task.Run(() => plugin.SendPlayerSearchInvites());
+                    Task.Run(() => plugin.SendExecuteSearch());
                     ImGui.CloseCurrentPopup();
                     sendInviteConfirmationOpen = false;
                 }
