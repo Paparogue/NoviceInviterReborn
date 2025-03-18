@@ -33,11 +33,13 @@ public class NoviceInviterReborn : IDalamudPlugin
     public string Name => "NoviceInviterReborn";
     public NoviceInviterConfig PluginConfig { get; private set; }
 
-    private delegate char NoviceInviteDelegate(IntPtr a1, IntPtr a2, short worldID, IntPtr playerName, byte a3);
-    private delegate char ExecuteSearchDelegate(IntPtr a1, IntPtr a2, byte a3);
+    private delegate char NoviceInviteDelegate(IntPtr unknownFunction, IntPtr unknownFunction2, short worldID, IntPtr playerName, byte always0x8);
+    private delegate char ExecuteSearchDelegate(IntPtr agent, IntPtr agent_plus_0x48, byte always0x0);
+    private delegate void PlayerSearchDelegate(IntPtr unknownFunction, IntPtr playerArray, uint always0xA);
 
     private NoviceInviteDelegate _noviceInvite;
     private ExecuteSearchDelegate _executeSearch;
+
     private bool drawConfigWindow;
     private readonly List<string> _invitedPlayers = new();
     private DateTime? _minWaitToCheck = DateTime.UtcNow;
@@ -54,19 +56,15 @@ public class NoviceInviterReborn : IDalamudPlugin
 
     public IPluginLog PluginLog { get; init; }
 
-    public delegate void PlayerSearchDelegate(IntPtr globalFunction, IntPtr playerArray, uint always0xA);
-    public delegate void ExecuteSearchBaseDelegate(IntPtr a1, float a2);
     private Hook<PlayerSearchDelegate> PlayerSearchHook = null;
     private List<String> _playerSearchList = new List<String>();
+
     private static readonly object predictionLock = new object();
     MLContext mlContext;
     ITransformer trainedModel;
     private bool _isActive = false;
     private DataViewSchema modelSchema;
     PredictionEngine<NameData, NamePrediction> predictionEngine;
-
-
-    //execute search E8 ?? ?? ?? ?? 48 8D 4C 24 ?? 41 C7 07 ?? ?? ?? ?? 41 C6 47
 
     public unsafe NoviceInviterReborn(
         IDalamudPluginInterface pluginInterface,
@@ -187,7 +185,7 @@ public class NoviceInviterReborn : IDalamudPlugin
         return _playerSearchList.Count;
     }
 
-    public void PlayerSearchClear()
+    public void PlayerSearchClearList()
     {
         _playerSearchList.Clear();
     }

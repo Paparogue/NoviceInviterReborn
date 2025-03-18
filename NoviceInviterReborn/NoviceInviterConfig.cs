@@ -151,8 +151,11 @@ namespace NoviceInviterReborn
 
                 if (ImGui.Button("Yes"))
                 {
-                    //Task.Run(() => plugin.SendPlayerSearchInvites());
-                    Task.Run(() => plugin.SendExecuteSearch());
+                    Task.Run(() => {
+                        plugin.PlayerSearchClearList();
+                        plugin.SendExecuteSearch();
+                        //plugin.SendPlayerSearchInvites();
+                        });
                     ImGui.CloseCurrentPopup();
                     sendInviteConfirmationOpen = false;
                 }
@@ -178,7 +181,7 @@ namespace NoviceInviterReborn
 
                 if (ImGui.Button("Yes"))
                 {
-                    plugin.PlayerSearchClear();
+                    plugin.PlayerSearchClearList();
                     ImGui.CloseCurrentPopup();
                     clearInviteConfirmationOpen = false;
                 }
