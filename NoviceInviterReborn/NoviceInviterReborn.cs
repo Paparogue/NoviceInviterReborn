@@ -325,19 +325,31 @@ public class NoviceInviterReborn : IDalamudPlugin
         }
         return true;
     }
-    
-    //agent + 0xb8 = class search 255 = all , 207 = no bots
-    //agent + 0x113 = area search, 5x 1 (byte) pro area x 11 total
-    //agent + 0xc0 = min level
-    //agent + 0xc4 = max level
-    //agent + 0xb4 = online status left side should be set to 0
-    //agent + 0xb5 = online status right side should be set to 1 for sprouts only or 3 for sprouts + returner
-    public unsafe void SendExecuteSearch()
+
+    public unsafe void SendExecuteSearch(int region)
     {
         var moduleInstance = FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentModule.Instance();
         IntPtr agent = (IntPtr)moduleInstance->GetAgentByInternalId(AgentId.Search);
-       _executeSearch(agent, agent + 0x48, 0);
-        PluginLog.Information($"Agent: 0x{((IntPtr)agent).ToInt64():X}");
+        var backupData = AgentSearchExtensions.BackupValues(agent);
+
+        try
+        {
+            var agentStruct = (AgentSearch*)agent;
+            agentStruct->OnlineStatusLeft = 0; // always 0
+            agentStruct->OnlineStatusRight = 3; // sprouts + returner
+            agentStruct->ClassSearch = 255; // all classes
+            agentStruct->Language = 15; // include all languages
+            agentStruct->Company = 0; // include all players regardless of company
+            agentStruct->MinLevel = 1;
+            agentStruct->MaxLevel = 100;
+            AgentSearchExtensions.SetOnlyOneRegion(agent, region);
+            _executeSearch(agent, agent + 0x48, 0);
+            PluginLog.Information($"Agent: 0x{((IntPtr)agent).ToInt64():X}");
+        }
+        finally
+        {
+            AgentSearchExtensions.RestoreValues(agent, backupData);
+        }
     }
 
     private unsafe void SendNoviceInvite(string playerName, short playerWorldID)
