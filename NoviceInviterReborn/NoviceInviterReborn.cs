@@ -51,7 +51,7 @@ public class NoviceInviterReborn : IDalamudPlugin
     private DateTime? _minWaitToCheck = DateTime.UtcNow;
     private DateTime? _minWaitToSave = DateTime.UtcNow;
 
-    private IntPtr _patchSignatureAddress = IntPtr.Zero;
+    private IntPtr _socialPanel = IntPtr.Zero;
     private byte[] _originalPatchBytes = null!;
     private bool _isPatchApplied = false;
 
@@ -134,15 +134,15 @@ public class NoviceInviterReborn : IDalamudPlugin
 
         try
         {
-            var openSocialPanel = "?? E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 0F 85 ?? ?? ?? ?? 48 8B 4B";
-            _patchSignatureAddress = SigScanner.ScanText(openSocialPanel);
-            _patchSignatureAddress += 0x1;
+            var openSocialPanelPtr = "?? E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 0F 85 ?? ?? ?? ?? 48 8B 4B";
+            _socialPanel = SigScanner.ScanText(openSocialPanelPtr);
+            _socialPanel += 0x1;
 
-            if (_patchSignatureAddress != IntPtr.Zero)
+            if (_socialPanel != IntPtr.Zero)
             {
-                PluginLog.Information($"Found patch signature at 0x{_patchSignatureAddress.ToInt64():X}");
+                PluginLog.Information($"Found patch signature at 0x{_socialPanel.ToInt64():X}");
                 _originalPatchBytes = new byte[5];
-                Marshal.Copy(_patchSignatureAddress, _originalPatchBytes, 0, 5);
+                Marshal.Copy(_socialPanel, _originalPatchBytes, 0, 5);
 
                 PluginLog.Debug($"Original bytes: {BitConverter.ToString(_originalPatchBytes)}");
             }
@@ -245,7 +245,7 @@ public class NoviceInviterReborn : IDalamudPlugin
 
     public void EnableSearchNop()
     {
-        if (_patchSignatureAddress == IntPtr.Zero || _originalPatchBytes == null || _isPatchApplied)
+        if (_socialPanel == IntPtr.Zero || _originalPatchBytes == null || _isPatchApplied)
         {
             PluginLog.Warning("Cannot apply patch: address not found, original bytes not saved, or patch already applied");
             return;
@@ -254,9 +254,9 @@ public class NoviceInviterReborn : IDalamudPlugin
         try
         {
             byte[] nopPatch = new byte[] { 0x90, 0x90, 0x90, 0x90, 0x90 };
-            SafeMemory.WriteBytes(_patchSignatureAddress, nopPatch);
+            SafeMemory.WriteBytes(_socialPanel, nopPatch);
 
-            PluginLog.Information($"Applied NOP patch at 0x{_patchSignatureAddress.ToInt64():X}");
+            PluginLog.Information($"Applied NOP patch at 0x{_socialPanel.ToInt64():X}");
             _isPatchApplied = true;
         }
         catch (Exception ex)
@@ -267,7 +267,7 @@ public class NoviceInviterReborn : IDalamudPlugin
 
     public void DisableSearchNop()
     {
-        if (_patchSignatureAddress == IntPtr.Zero || _originalPatchBytes == null || !_isPatchApplied)
+        if (_socialPanel == IntPtr.Zero || _originalPatchBytes == null || !_isPatchApplied)
         {
             PluginLog.Warning("Cannot restore patch: address not found, original bytes not saved, or patch not applied");
             return;
@@ -275,8 +275,8 @@ public class NoviceInviterReborn : IDalamudPlugin
 
         try
         {
-            SafeMemory.WriteBytes(_patchSignatureAddress, _originalPatchBytes);
-            PluginLog.Information($"Restored original bytes at 0x{_patchSignatureAddress.ToInt64():X}");
+            SafeMemory.WriteBytes(_socialPanel, _originalPatchBytes);
+            PluginLog.Information($"Restored original bytes at 0x{_socialPanel.ToInt64():X}");
             _isPatchApplied = false;
         }
         catch (Exception ex)
