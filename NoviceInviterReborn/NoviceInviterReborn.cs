@@ -325,7 +325,13 @@ public class NoviceInviterReborn : IDalamudPlugin
         }
         return true;
     }
-
+    
+    //agent + 0xb8 = class search 255 = all , 207 = no bots
+    //agent + 0x113 = area search, 5x 1 (byte) pro area x 11 total
+    //agent + 0xc0 = min level
+    //agent + 0xc4 = max level
+    //agent + 0xb4 = online status left side should be set to 0
+    //agent + 0xb5 = online status right side should be set to 1 for sprouts only or 3 for sprouts + returner
     public unsafe void SendExecuteSearch()
     {
         var moduleInstance = FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentModule.Instance();
