@@ -22,6 +22,7 @@ using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using System.Runtime.Intrinsics.X86;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI;
+using Dalamud;
 
 #pragma warning disable CA1816
 #pragma warning disable CS8602
@@ -32,6 +33,7 @@ public class NoviceInviterReborn : IDalamudPlugin
 {
     public string Name => "NoviceInviterReborn";
     public NoviceInviterConfig PluginConfig { get; private set; }
+    private bool drawConfigWindow;
 
     private delegate char NoviceInviteDelegate(IntPtr unknownFunction, IntPtr unknownFunction2, short worldID, IntPtr playerName, byte always0x8);
     private delegate char ExecuteSearchDelegate(IntPtr agent, IntPtr agent_plus_0x48, byte always0x0);
@@ -40,11 +42,18 @@ public class NoviceInviterReborn : IDalamudPlugin
     private NoviceInviteDelegate _noviceInvite;
     private ExecuteSearchDelegate _executeSearch;
 
-    private bool drawConfigWindow;
-    private readonly List<string> _invitedPlayers = new();
+    private Hook<PlayerSearchDelegate> _playerSearchHook = null!;
+    private readonly List<String> _playerSearchList = [];
+
+    private readonly List<string> _alreadyInvitedPlayers = [];
+    private readonly string _invitedPlayersPath;
+
     private DateTime? _minWaitToCheck = DateTime.UtcNow;
     private DateTime? _minWaitToSave = DateTime.UtcNow;
-    private string invitedPath;
+
+    private IntPtr _patchSignatureAddress = IntPtr.Zero;
+    private byte[] _originalPatchBytes = null!;
+    private bool _isPatchApplied = false;
 
     public IDalamudPluginInterface PluginInterface { get; init; }
     public IClientState Client { get; init; }
@@ -55,9 +64,6 @@ public class NoviceInviterReborn : IDalamudPlugin
     public IGameInteropProvider DalamudHook { get; init; }
 
     public IPluginLog PluginLog { get; init; }
-
-    private Hook<PlayerSearchDelegate> PlayerSearchHook = null;
-    private List<String> _playerSearchList = new List<String>();
 
     private static readonly object predictionLock = new object();
     MLContext mlContext;
@@ -87,7 +93,7 @@ public class NoviceInviterReborn : IDalamudPlugin
         PluginLog = pluginLog;
         PluginConfig = PluginInterface.GetPluginConfig() as NoviceInviterConfig ?? new NoviceInviterConfig();
         PluginConfig.Init(this);
-        invitedPath = Path.Combine(PluginInterface.GetPluginConfigDirectory(), "player.inv");
+        _invitedPlayersPath = Path.Combine(PluginInterface.GetPluginConfigDirectory(), "player.inv");
         SetupCommands();
         LoadInvitedPlayers();
         InitHooknSigs();
@@ -100,8 +106,10 @@ public class NoviceInviterReborn : IDalamudPlugin
 
     public void Dispose()
     {
-        PlayerSearchHook.Disable();
-        PlayerSearchHook.Dispose();
+        _playerSearchHook.Disable();
+        _playerSearchHook.Dispose();
+        if (_isPatchApplied)
+            DisableSearchNop();
         PluginInterface.UiBuilder.Draw -= BuildUI;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= OpenConfigUi;
@@ -117,12 +125,36 @@ public class NoviceInviterReborn : IDalamudPlugin
         var playerSearchSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? 49 8B 4F ?? 48 8B 01 FF 50 ?? 41 0F B6 97");
         if (playerSearchSigPtr != IntPtr.Zero)
         {
-            PlayerSearchHook = DalamudHook.HookFromAddress<PlayerSearchDelegate>(playerSearchSigPtr, PlayerSearchDetour);
-            PlayerSearchHook.Enable();
+            _playerSearchHook = DalamudHook.HookFromAddress<PlayerSearchDelegate>(playerSearchSigPtr, PlayerSearchDetour);
+            _playerSearchHook.Enable();
         }
 
         var executeSearchPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? 48 8D 4C 24 ?? 41 C7 07 ?? ?? ?? ?? 41 C6 47");
         _executeSearch = Marshal.GetDelegateForFunctionPointer<ExecuteSearchDelegate>(executeSearchPtr);
+
+        try
+        {
+            var openSocialPanel = "?? E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 0F 85 ?? ?? ?? ?? 48 8B 4B";
+            _patchSignatureAddress = SigScanner.ScanText(openSocialPanel);
+            _patchSignatureAddress += 0x1;
+
+            if (_patchSignatureAddress != IntPtr.Zero)
+            {
+                PluginLog.Information($"Found patch signature at 0x{_patchSignatureAddress.ToInt64():X}");
+                _originalPatchBytes = new byte[5];
+                Marshal.Copy(_patchSignatureAddress, _originalPatchBytes, 0, 5);
+
+                PluginLog.Debug($"Original bytes: {BitConverter.ToString(_originalPatchBytes)}");
+            }
+            else
+            {
+                PluginLog.Error("Failed to find patch signature");
+            }
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error(ex, "Error scanning for patch signature");
+        }
     }
 
     private void InitML()
@@ -177,7 +209,7 @@ public class NoviceInviterReborn : IDalamudPlugin
 
     public int InvitedPlayersAmount()
     {
-        return _invitedPlayers.Count;
+        return _alreadyInvitedPlayers.Count;
     }
 
     public int PlayerSearchAmount()
@@ -208,7 +240,49 @@ public class NoviceInviterReborn : IDalamudPlugin
             playerArrayBeginning += 0x70;
         }
 
-        PlayerSearchHook.Original(globalFunction, playerArray, always0xA);
+        _playerSearchHook.Original(globalFunction, playerArray, always0xA);
+    }
+
+    public void EnableSearchNop()
+    {
+        if (_patchSignatureAddress == IntPtr.Zero || _originalPatchBytes == null || _isPatchApplied)
+        {
+            PluginLog.Warning("Cannot apply patch: address not found, original bytes not saved, or patch already applied");
+            return;
+        }
+
+        try
+        {
+            byte[] nopPatch = new byte[] { 0x90, 0x90, 0x90, 0x90, 0x90 };
+            SafeMemory.WriteBytes(_patchSignatureAddress, nopPatch);
+
+            PluginLog.Information($"Applied NOP patch at 0x{_patchSignatureAddress.ToInt64():X}");
+            _isPatchApplied = true;
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error(ex, "Error applying patch");
+        }
+    }
+
+    public void DisableSearchNop()
+    {
+        if (_patchSignatureAddress == IntPtr.Zero || _originalPatchBytes == null || !_isPatchApplied)
+        {
+            PluginLog.Warning("Cannot restore patch: address not found, original bytes not saved, or patch not applied");
+            return;
+        }
+
+        try
+        {
+            SafeMemory.WriteBytes(_patchSignatureAddress, _originalPatchBytes);
+            PluginLog.Information($"Restored original bytes at 0x{_patchSignatureAddress.ToInt64():X}");
+            _isPatchApplied = false;
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error(ex, "Error restoring original bytes");
+        }
     }
 
     public void SendPlayerSearchInvites()
@@ -223,11 +297,11 @@ public class NoviceInviterReborn : IDalamudPlugin
             foreach (var player in _playerSearchList)
             {
                 string worldName = Client.LocalPlayer.CurrentWorld.Value.Name.ToString();
-                if (_invitedPlayers.Contains(player.Trim() + "-" + worldName))
+                if (_alreadyInvitedPlayers.Contains(player.Trim() + "-" + worldName))
                     continue;
 
                 SendNoviceInvite(player, (short)Client.LocalPlayer.CurrentWorld.RowId);
-                _invitedPlayers.Add(player.Trim() + "-" + worldName);
+                _alreadyInvitedPlayers.Add(player.Trim() + "-" + worldName);
                 Thread.Sleep(200);
             }
 
@@ -315,10 +389,10 @@ public class NoviceInviterReborn : IDalamudPlugin
 
     private void LoadInvitedPlayers()
     {
-        if (!File.Exists(invitedPath))
+        if (!File.Exists(_invitedPlayersPath))
             try
             {
-                File.Create(invitedPath).Close();
+                File.Create(_invitedPlayersPath).Close();
             }
             catch (Exception)
             {
@@ -327,8 +401,8 @@ public class NoviceInviterReborn : IDalamudPlugin
 
         try
         {
-            using var reader = new StreamReader(invitedPath);
-            while (reader.ReadLine() is { } line) _invitedPlayers.Add(line);
+            using var reader = new StreamReader(_invitedPlayersPath);
+            while (reader.ReadLine() is { } line) _alreadyInvitedPlayers.Add(line);
         }
         catch (Exception)
         {
@@ -340,7 +414,7 @@ public class NoviceInviterReborn : IDalamudPlugin
     {
         try
         {
-            File.WriteAllLines(invitedPath, _invitedPlayers);
+            File.WriteAllLines(_invitedPlayersPath, _alreadyInvitedPlayers);
         }
         catch (Exception)
         {
@@ -415,7 +489,7 @@ public class NoviceInviterReborn : IDalamudPlugin
                 //is a sprout
                 if (player.OnlineStatus.RowId != 32) continue;
                 //was not already invited
-                if (_invitedPlayers is null || _invitedPlayers.Contains(player.Name.TextValue.Trim() + "-" + worldName)) continue;
+                if (_alreadyInvitedPlayers is null || _alreadyInvitedPlayers.Contains(player.Name.TextValue.Trim() + "-" + worldName)) continue;
                 //is within distance
                 if (!IsPlayerWithinDistance(o, PluginConfig.sliderMaxInviteRange)) continue;
                 //enough time passed between invite
@@ -423,7 +497,7 @@ public class NoviceInviterReborn : IDalamudPlugin
                 //invite player
                 SendNoviceInvite(player.Name.TextValue, (short)player.HomeWorld.RowId);
                 //dont invite them twice
-                _invitedPlayers.Add(player.Name.TextValue.Trim() + "-" + worldName);
+                _alreadyInvitedPlayers.Add(player.Name.TextValue.Trim() + "-" + worldName);
             }
         }
         catch (Exception ex)

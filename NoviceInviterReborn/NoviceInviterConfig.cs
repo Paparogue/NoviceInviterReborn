@@ -36,7 +36,7 @@ namespace NoviceInviterReborn
 
             var windowFlags = ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse;
 
-            ImGui.GetForegroundDrawList();
+            ImGui.GetBackgroundDrawList();
 
             ImGui.SetNextWindowSize(new Vector2(500, 400), ImGuiCond.FirstUseEver);
 
@@ -127,14 +127,14 @@ namespace NoviceInviterReborn
 
             ImGui.PopStyleColor(3);
 
-            if (ImGui.Button("Send Invite"))
+            if (ImGui.Button("Send Mass Invitation"))
             {
                 sendInviteConfirmationOpen = true;
             }
 
             ImGui.SameLine();
 
-            if (ImGui.Button("Clear Invite"))
+            if (ImGui.Button("Clear Invitation List"))
             {
                 clearInviteConfirmationOpen = true;
             }
@@ -146,15 +146,17 @@ namespace NoviceInviterReborn
 
             if (ImGui.BeginPopupModal("SendInviteConfirmation", ref sendInviteConfirmationOpen, ImGuiWindowFlags.AlwaysAutoResize))
             {
-                ImGui.Text("Are you sure you want to send the invite?");
+                ImGui.Text("Are you sure you want to send the invites?");
                 ImGui.Separator();
 
                 if (ImGui.Button("Yes"))
                 {
                     Task.Run(() => {
+                        plugin.EnableSearchNop();
                         plugin.PlayerSearchClearList();
                         plugin.SendExecuteSearch();
                         //plugin.SendPlayerSearchInvites();
+                        plugin.DisableSearchNop();
                         });
                     ImGui.CloseCurrentPopup();
                     sendInviteConfirmationOpen = false;
@@ -176,7 +178,7 @@ namespace NoviceInviterReborn
 
             if (ImGui.BeginPopupModal("ClearInviteConfirmation", ref clearInviteConfirmationOpen, ImGuiWindowFlags.AlwaysAutoResize))
             {
-                ImGui.Text("Are you sure you want to clear the invite?");
+                ImGui.Text("Are you sure you want to clear the invite list?");
                 ImGui.Separator();
 
                 if (ImGui.Button("Yes"))
