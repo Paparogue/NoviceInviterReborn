@@ -151,13 +151,26 @@ namespace NoviceInviterReborn
 
                 if (ImGui.Button("Yes"))
                 {
-                    Task.Run(() => {
-                        plugin.EnableSearchNop();
-                        plugin.PlayerSearchClearList();
-                        plugin.SendExecuteSearch();
-                        //plugin.SendPlayerSearchInvites();
-                        plugin.DisableSearchNop();
-                        });
+                    Task.Run(async () => {
+                        try
+                        {
+                            plugin.PlayerSearchClearList();
+                            plugin.EnableSearchNop();
+                            for (int i = 1; i <= 11; i++)
+                            {
+                                plugin.SendExecuteSearch(i);
+
+                                if (i < 11)
+                                    await Task.Delay(5000);
+                            }
+                            plugin.DisableSearchNop();
+                            //plugin.SendPlayerSearchInvites();
+                        }
+                        catch (Exception ex)
+                        {
+                            plugin.DisableSearchNop();
+                        }
+                    });
                     ImGui.CloseCurrentPopup();
                     sendInviteConfirmationOpen = false;
                 }
