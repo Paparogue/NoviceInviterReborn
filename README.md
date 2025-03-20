@@ -45,7 +45,7 @@ https://raw.githubusercontent.com/Paparogue/PaparogueRepo/refs/heads/main/repo.j
 
 ## Commands
 
-- `/nir`: Opens the configuration window
+- `/nirui`: Opens the configuration window
 
 ## Important Notes
 
