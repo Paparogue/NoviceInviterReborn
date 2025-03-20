@@ -16,7 +16,6 @@ namespace NoviceInviterReborn
         public bool checkBoxDoNotInvite = false;
         public bool sendInviteConfirmationOpen = false;
         public bool clearInviteConfirmationOpen = false;
-        public bool sendInviteBool { get; set; }
 
         public void Init(NoviceInviterReborn plugin)
         {
@@ -28,7 +27,6 @@ namespace NoviceInviterReborn
             plugin.PluginInterface.SavePluginConfig(this);
         }
 
-        
         public bool DrawConfigUI()
 
         {
@@ -104,11 +102,11 @@ namespace NoviceInviterReborn
 
             ImGui.Indent(10);
 
-            changed |= ImGui.Checkbox("Do you want to invite possible Bot Jobs? (Not recommended)", ref checkBoxDoNotInvite);
+            changed |= ImGui.Checkbox("Do you want to invite possible bots? (Not recommended)", ref checkBoxDoNotInvite);
 
             ImGui.Separator();
             ImGui.Text($"Total players invited: {plugin.InvitedPlayersAmount()}");
-            ImGui.Text($"Total players in list: {plugin.PlayerSearchAmount()}");
+            ImGui.Text($"Total players in list: {plugin.GetPlayerSearchAmount()}");
             ImGui.Separator();
 
             if (changed)
@@ -146,29 +144,47 @@ namespace NoviceInviterReborn
 
             if (ImGui.BeginPopupModal("SendInviteConfirmation", ref sendInviteConfirmationOpen, ImGuiWindowFlags.AlwaysAutoResize))
             {
-                ImGui.Text("Are you sure you want to send the invites?");
+                ImGui.Text("*WARNING* This will invite hundred of sprouts at once do you wanna continue?");
                 ImGui.Separator();
 
                 if (ImGui.Button("Yes"))
                 {
-                    Task.Run(async () => {
+                    Task.Run(() =>
+                    {
                         try
                         {
+                            if (plugin._isActive)
+                                return;
+
+                            plugin._isActive = true;
                             plugin.PlayerSearchClearList();
                             plugin.EnableSearchNop();
+                            Thread.Sleep(2000);
+                            var oldPlayers = plugin.GetPlayerSearchAmount();
                             for (int i = 1; i <= 11; i++)
                             {
+                                plugin.PluginLog.Information("Executing Search Area: " + i);
                                 plugin.SendExecuteSearch(i);
-
-                                if (i < 11)
-                                    await Task.Delay(5000);
+                                while (true)
+                                {
+                                    Thread.Sleep(2000);
+                                    plugin.PluginLog.Information("Current players: " + plugin.GetPlayerSearchAmount() + " - Old players: " + oldPlayers);
+                                    if (oldPlayers == plugin.GetPlayerSearchAmount())
+                                    {
+                                        break;
+                                    }
+                                    oldPlayers = plugin.GetPlayerSearchAmount();
+                                }
                             }
                             plugin.DisableSearchNop();
-                            //plugin.SendPlayerSearchInvites();
+                            Thread.Sleep(2000);
+                            plugin.SendPlayerSearchInvites();
+                            plugin._isActive = false;
                         }
-                        catch (Exception ex)
+                        catch (Exception)
                         {
                             plugin.DisableSearchNop();
+                            plugin._isActive = false;
                         }
                     });
                     ImGui.CloseCurrentPopup();

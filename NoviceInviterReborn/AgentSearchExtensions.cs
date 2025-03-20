@@ -96,7 +96,7 @@ public static unsafe class AgentSearchExtensions
         // Backup basic fields
         backup.OnlineStatusLeft = agentStruct->OnlineStatusLeft;
         backup.OnlineStatusRight = agentStruct->OnlineStatusRight;
-        backup.ClassSearch = agentStruct->ClassSearch;
+        backup.ClassSearch = agentStruct->ClassSearchRow1;
         backup.MinLevel = agentStruct->MinLevel;
         backup.MaxLevel = agentStruct->MaxLevel;
         backup.Language = agentStruct->Language;
@@ -190,7 +190,7 @@ public static unsafe class AgentSearchExtensions
         // Restore basic fields
         agentStruct->OnlineStatusLeft = backup.OnlineStatusLeft;
         agentStruct->OnlineStatusRight = backup.OnlineStatusRight;
-        agentStruct->ClassSearch = backup.ClassSearch;
+        agentStruct->ClassSearchRow1 = backup.ClassSearch;
         agentStruct->MinLevel = backup.MinLevel;
         agentStruct->MaxLevel = backup.MaxLevel;
         agentStruct->Language = backup.Language;

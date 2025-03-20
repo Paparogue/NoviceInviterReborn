@@ -54,6 +54,7 @@ public class NoviceInviterReborn : IDalamudPlugin
     private IntPtr _socialPanel = IntPtr.Zero;
     private byte[] _originalPatchBytes = null!;
     private bool _isPatchApplied = false;
+    public bool _isActive = false;
 
     public IDalamudPluginInterface PluginInterface { get; init; }
     public IClientState Client { get; init; }
@@ -64,13 +65,6 @@ public class NoviceInviterReborn : IDalamudPlugin
     public IGameInteropProvider DalamudHook { get; init; }
 
     public IPluginLog PluginLog { get; init; }
-
-    private static readonly object predictionLock = new object();
-    MLContext mlContext;
-    ITransformer trainedModel;
-    private bool _isActive = false;
-    private DataViewSchema modelSchema;
-    PredictionEngine<NameData, NamePrediction> predictionEngine;
 
     public unsafe NoviceInviterReborn(
         IDalamudPluginInterface pluginInterface,
@@ -97,7 +91,6 @@ public class NoviceInviterReborn : IDalamudPlugin
         SetupCommands();
         LoadInvitedPlayers();
         InitHooknSigs();
-        InitML();
         PluginInterface.UiBuilder.Draw += BuildUI;
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
         PluginInterface.UiBuilder.OpenMainUi += OpenConfigUi;
@@ -157,62 +150,12 @@ public class NoviceInviterReborn : IDalamudPlugin
         }
     }
 
-    private void InitML()
-    {
-        string modelUrl = "https://raw.githubusercontent.com/Paparogue/NoviceInviterReborn/refs/heads/master/DetectionModel/model.zip";
-        string modelPath = Path.Combine(PluginInterface.GetPluginConfigDirectory(), "model.zip");
-        if (!File.Exists(modelPath))
-        {
-            try
-            {
-                PluginLog.Information($"Downloading model from {modelUrl}");
-
-                using (var httpClient = new HttpClient())
-                {
-                    using (var response = httpClient.GetAsync(modelUrl).Result)
-                    {
-                        if (response.IsSuccessStatusCode)
-                        {
-                            using (var fileStream = new FileStream(modelPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                            {
-                                response.Content.CopyToAsync(fileStream).Wait();
-                            }
-                            PluginLog.Information($"Model downloaded to {modelPath}");
-                        }
-                        else
-                        {
-                            PluginLog.Error($"Failed to download model: HTTP status code {response.StatusCode}");
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                PluginLog.Error($"Failed to download model: {ex.Message}");
-            }
-        }
-
-        mlContext = new MLContext();
-        try
-        {
-            using (var fileStream = new FileStream(modelPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-            {
-                trainedModel = mlContext.Model.Load(fileStream, out modelSchema);
-            }
-            predictionEngine = mlContext.Model.CreatePredictionEngine<NameData, NamePrediction>(trainedModel);
-        }
-        catch (Exception ex)
-        {
-            PluginLog.Error($"Failed to load model: {ex.Message}");
-        }
-    }
-
     public int InvitedPlayersAmount()
     {
         return _alreadyInvitedPlayers.Count;
     }
 
-    public int PlayerSearchAmount()
+    public int GetPlayerSearchAmount()
     {
         return _playerSearchList.Count;
     }
@@ -228,7 +171,7 @@ public class NoviceInviterReborn : IDalamudPlugin
         for (int i = 0; i < 10; i++)
         {
             var playerData = Marshal.PtrToStructure<PlayerSearch.PlayerData>(playerArrayBeginning);
-            if (IsValidPlayerName(playerData.PlayerName))
+            if (IsValidPlayerName(playerData.PlayerName) && _isActive)
             {
                 _playerSearchList.Add(playerData.PlayerName.Trim());
             }
@@ -284,33 +227,18 @@ public class NoviceInviterReborn : IDalamudPlugin
             PluginLog.Error(ex, "Error restoring original bytes");
         }
     }
-
     public void SendPlayerSearchInvites()
     {
-        if (_isActive || Client.LocalPlayer is null)
-            return;
-
-        _isActive = true;
-
-        try
+        foreach (var player in _playerSearchList)
         {
-            foreach (var player in _playerSearchList)
-            {
-                string worldName = Client.LocalPlayer.CurrentWorld.Value.Name.ToString();
-                if (_alreadyInvitedPlayers.Contains(player.Trim() + "-" + worldName))
-                    continue;
-
-                SendNoviceInvite(player, (short)Client.LocalPlayer.CurrentWorld.RowId);
-                _alreadyInvitedPlayers.Add(player.Trim() + "-" + worldName);
-                Thread.Sleep(200);
-            }
-
-            _playerSearchList.Clear();
+            string worldName = Client.LocalPlayer.CurrentWorld.Value.Name.ToString();
+            if (_alreadyInvitedPlayers.Contains(player.Trim() + "-" + worldName))
+                continue;
+            SendNoviceInvite(player, (short)Client.LocalPlayer.CurrentWorld.RowId);
+            _alreadyInvitedPlayers.Add(player.Trim() + "-" + worldName);
+            Thread.Sleep(200);
         }
-        finally
-        {
-            _isActive = false;
-        }
+        _playerSearchList.Clear();
     }
 
     private bool IsValidPlayerName(string playerName)
@@ -337,10 +265,26 @@ public class NoviceInviterReborn : IDalamudPlugin
             var agentStruct = (AgentSearch*)agent;
             agentStruct->OnlineStatusLeft = 0; // always 0
             agentStruct->OnlineStatusRight = 3; // sprouts + returner
-            agentStruct->ClassSearch = 255; // all classes
+            if(!PluginConfig.checkBoxDoNotInvite)
+            {
+                agentStruct->ClassSearchRow1 = 223; //223
+                agentStruct->ClassSearchRow3 = 107; //107
+            } 
+            else
+            {
+                agentStruct->ClassSearchRow1 = 255;
+                agentStruct->ClassSearchRow3 = 255;
+            }
+            agentStruct->ClassSearchRow2 = 255;
+            agentStruct->ClassSearchRow4 = 255; //255
+            agentStruct->ClassSearchRow5 = 255; //255
+            agentStruct->ClassSearchRow6 = 3; //3
             agentStruct->Language = 15; // include all languages
             agentStruct->Company = 0; // include all players regardless of company
-            agentStruct->MinLevel = 1;
+            if (!PluginConfig.checkBoxDoNotInvite)
+                agentStruct->MinLevel = 5; // too many bots here
+            else
+                agentStruct->MinLevel = 1;
             agentStruct->MaxLevel = 100;
             AgentSearchExtensions.SetOnlyOneRegion(agent, region);
             _executeSearch(agent, agent + 0x48, 0);
@@ -440,28 +384,6 @@ public class NoviceInviterReborn : IDalamudPlugin
         }
     }
 
-    public bool IsABot(string PlayerName)
-    {
-        if (string.IsNullOrEmpty(PlayerName))
-        {
-            throw new ArgumentNullException(nameof(PlayerName), "PlayerName is null or empty in IsABot.");
-        }
-
-        if (predictionEngine == null)
-        {
-            throw new InvalidOperationException("predictionEngine is not initialized in IsABot.");
-        }
-
-        var PlayerNameData = new NameData { Name = PlayerName.Trim() };
-
-        NamePrediction prediction;
-        lock (predictionLock)
-        {
-            prediction = predictionEngine.Predict(PlayerNameData);
-        }
-        return prediction.PredictedLabel;
-    }
-
 
     private unsafe void OnUpdate()
     {
@@ -481,21 +403,8 @@ public class NoviceInviterReborn : IDalamudPlugin
                 IPlayerCharacter? player = o as IPlayerCharacter;
                 string worldName = player.CurrentWorld.Value.Name.ToString();
                 var jobName = player.ClassJob.Value.NameEnglish.ToString();
-                bool botty = false;
 
-                try
-                {
-                    botty = IsABot(player.Name.TextValue);
-                }
-                catch (Exception ex)
-                {
-                    continue; // Skip this player and continue with the next one
-                }
-
-                //temp disabled needs new training
-                //if (botty) continue;
-
-                //anti bot
+                //too many bots and these people will level up fast
                 if (player.Level < 5) continue;
 
                 if (!PluginConfig.checkBoxDoNotInvite)

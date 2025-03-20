@@ -15,7 +15,22 @@ namespace NoviceInviterReborn
 
         // Class search field
         [FieldOffset(0xB8)]
-        public byte ClassSearch; // 255 = all, 207 = no bots
+        public byte ClassSearchRow1; // 255 = all
+
+        [FieldOffset(0xB9)]
+        public byte ClassSearchRow2; // 255 = all
+
+        [FieldOffset(0xBA)]
+        public byte ClassSearchRow3; // 255 = all
+
+        [FieldOffset(0xBB)]
+        public byte ClassSearchRow4; // 255 = all
+
+        [FieldOffset(0xBC)]
+        public byte ClassSearchRow5; // 255 = all
+
+        [FieldOffset(0xBD)]
+        public byte ClassSearchRow6; // 3 = all
 
         // Level search fields
         [FieldOffset(0xC0)]
