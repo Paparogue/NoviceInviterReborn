@@ -434,7 +434,7 @@ public class NoviceInviterReborn : IDalamudPlugin
 
     public void SetupCommands()
     {
-        CommandManager.AddHandler("/nir", new CommandInfo(OnConfigCommandHandler)
+        CommandManager.AddHandler("/nirui", new CommandInfo(OnConfigCommandHandler)
         {
             HelpMessage = $"Opens the config window for {Name}.",
             ShowInHelp = true
@@ -453,7 +453,7 @@ public class NoviceInviterReborn : IDalamudPlugin
 
     public void RemoveCommands()
     {
-        CommandManager.RemoveHandler("/nir");
+        CommandManager.RemoveHandler("/nirui");
     }
 
     private void BuildUI()
