@@ -21,7 +21,7 @@ https://raw.githubusercontent.com/Paparogue/PaparogueRepo/refs/heads/main/repo.j
 
 ## Configuration Guide
 
-![NoviceInviterReborn UI](https://raw.githubusercontent.com/YourUsername/NoviceInviterReborn/main/images/ui-screenshot.png)
+![NoviceInviterReborn UI](https://raw.github.com/Paparogue/NoviceInviterReborn/d97dfa01a1a213d0f3eb67c42052431847f4bc17/grafik.png)
 
 ### General Settings
 
