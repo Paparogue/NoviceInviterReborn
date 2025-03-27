@@ -7,8 +7,8 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/Paparogue",
   "DalamudApiLevel": 12,
-  "IconUrl": "https://cdn.discordapp.com/attachments/695506857145532457/1129405551042904074/noviceinv_64.png",
-  "ImageUrls": [ "https://raw.github.com/Paparogue/NoviceInviterReborn/ff850b1fd057abfff38318e20b1f48b1cd68e837/NoviceInviter.png" ],
+  "IconUrl": "https://raw.github.com/Paparogue/NoviceInviterReborn/ff850b1fd057abfff38318e20b1f48b1cd68e837/NoviceInviter.png",
+  "ImageUrls": [ "" ],
   "Tags": [
     "UI",
     "Utility"
