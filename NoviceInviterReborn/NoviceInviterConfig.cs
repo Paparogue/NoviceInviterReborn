@@ -178,7 +178,7 @@ namespace NoviceInviterReborn
                             }
                             plugin.DisableSearchNop();
                             Thread.Sleep(2000);
-                            //plugin.SendPlayerSearchInvites();
+                            plugin.SendPlayerSearchInvites();
                             plugin._isActive = false;
                         }
                         catch (Exception)
