@@ -113,7 +113,7 @@ public class NoviceInviterReborn : IDalamudPlugin
         var noviceSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? EB 40 41 B1 09");
         _noviceInvite = Marshal.GetDelegateForFunctionPointer<NoviceInviteDelegate>(noviceSigPtr);
 
-        var playerSearchSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? 49 8B 4F ?? 48 8B 01 FF 50 ?? 41 0F B6 97");
+        var playerSearchSigPtr = SigScanner.ScanText("E8 ?? ?? ?? ?? 48 8B 4D 08 48 8B 01 FF 50 40 0F B6 95 ?? ?? ?? ??");
         if (playerSearchSigPtr != IntPtr.Zero)
         {
             _playerSearchHook = DalamudHook.HookFromAddress<PlayerSearchDelegate>(playerSearchSigPtr, PlayerSearchDetour);
