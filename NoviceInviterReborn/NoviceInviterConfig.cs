@@ -107,6 +107,11 @@ namespace NoviceInviterReborn
             ImGui.Separator();
             ImGui.Text($"Total players invited: {plugin.InvitedPlayersAmount()}");
             ImGui.Text($"Total players in list: {plugin.GetPlayerSearchAmount()}");
+            ImGui.Text($"Pending invites: {plugin.GetPendingInvitesCount()}");
+            if (plugin._isActive)
+            {
+                ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), "Mass invite process is active...");
+            }
             ImGui.Separator();
 
             if (changed)
@@ -149,44 +154,8 @@ namespace NoviceInviterReborn
 
                 if (ImGui.Button("Yes"))
                 {
-                    Task.Run(() =>
-                    {
-                        try
-                        {
-                            if (plugin._isActive)
-                                return;
-
-                            plugin._isActive = true;
-                            plugin.PlayerSearchClearList();
-                            plugin.EnableSearchNop();
-                            Thread.Sleep(2000);
-                            var oldPlayers = plugin.GetPlayerSearchAmount();
-                            for (int i = 1; i <= 11; i++)
-                            {
-                                plugin.PluginLog.Information("Executing Search Area: " + i);
-                                plugin.SendExecuteSearch(i);
-                                while (true)
-                                {
-                                    Thread.Sleep(2000);
-                                    plugin.PluginLog.Information("Current players: " + plugin.GetPlayerSearchAmount() + " - Old players: " + oldPlayers);
-                                    if (oldPlayers == plugin.GetPlayerSearchAmount())
-                                    {
-                                        break;
-                                    }
-                                    oldPlayers = plugin.GetPlayerSearchAmount();
-                                }
-                            }
-                            plugin.DisableSearchNop();
-                            Thread.Sleep(2000);
-                            plugin.SendPlayerSearchInvites();
-                            plugin._isActive = false;
-                        }
-                        catch (Exception)
-                        {
-                            plugin.DisableSearchNop();
-                            plugin._isActive = false;
-                        }
-                    });
+                    // Use the new queue-based approach instead of Task.Run
+                    plugin.StartMassInviteProcess();
                     ImGui.CloseCurrentPopup();
                     sendInviteConfirmationOpen = false;
                 }
@@ -212,7 +181,7 @@ namespace NoviceInviterReborn
 
                 if (ImGui.Button("Yes"))
                 {
-                    plugin.PlayerSearchClearList();
+                    plugin.QueueFrameworkAction(() => plugin.PlayerSearchClearList());
                     ImGui.CloseCurrentPopup();
                     clearInviteConfirmationOpen = false;
                 }

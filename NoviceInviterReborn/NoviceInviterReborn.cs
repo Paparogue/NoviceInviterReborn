@@ -54,6 +54,15 @@ public class NoviceInviterReborn : IDalamudPlugin
     private bool _isPatchApplied = false;
     public bool _isActive = false;
 
+    // Queue system for framework thread operations
+    private readonly Queue<Action> _frameworkQueue = new();
+    private readonly object _queueLock = new();
+
+    // Invite processing system
+    private readonly Queue<string> _pendingInvites = new();
+    private DateTime _lastInviteTime = DateTime.MinValue;
+    private const int InviteDelayMs = 200;
+
     public IDalamudPluginInterface PluginInterface { get; init; }
     public IClientState Client { get; init; }
     public ISigScanner SigScanner { get; init; }
@@ -61,6 +70,7 @@ public class NoviceInviterReborn : IDalamudPlugin
     public ICommandManager CommandManager { get; init; }
     public ICondition Condition { get; init; }
     public IGameInteropProvider DalamudHook { get; init; }
+    public IFramework Framework { get; init; }
 
     public IPluginLog PluginLog { get; init; }
 
@@ -72,6 +82,7 @@ public class NoviceInviterReborn : IDalamudPlugin
         ICommandManager commandManager,
         IGameInteropProvider dalamudHook,
         ICondition condition,
+        IFramework framework,
         IPluginLog pluginLog
     )
     {
@@ -82,6 +93,7 @@ public class NoviceInviterReborn : IDalamudPlugin
         Objects = objects;
         CommandManager = commandManager;
         Condition = condition;
+        Framework = framework;
         PluginLog = pluginLog;
         PluginConfig = PluginInterface.GetPluginConfig() as NoviceInviterConfig ?? new NoviceInviterConfig();
         PluginConfig.Init(this);
@@ -93,6 +105,7 @@ public class NoviceInviterReborn : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
         PluginInterface.UiBuilder.OpenMainUi += OpenConfigUi;
         PluginInterface.UiBuilder.Draw += OnUpdate;
+        Framework.Update += OnFrameworkUpdate;
     }
 
     public void Dispose()
@@ -105,7 +118,147 @@ public class NoviceInviterReborn : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= OpenConfigUi;
         PluginInterface.UiBuilder.Draw -= OnUpdate;
+        Framework.Update -= OnFrameworkUpdate;
         RemoveCommands();
+    }
+
+    private void OnFrameworkUpdate(IFramework fw)
+    {
+        // Process queued framework actions
+        lock (_queueLock)
+        {
+            while (_frameworkQueue.TryDequeue(out var action))
+            {
+                try
+                {
+                    action();
+                }
+                catch (Exception ex)
+                {
+                    PluginLog.Error(ex, "Error executing queued framework action");
+                }
+            }
+        }
+
+        // Process pending invites with timing
+        if (_pendingInvites.Count > 0)
+        {
+            var now = DateTime.UtcNow;
+            if ((now - _lastInviteTime).TotalMilliseconds >= InviteDelayMs)
+            {
+                if (_pendingInvites.TryDequeue(out var playerName))
+                {
+                    try
+                    {
+                        string worldName = Client.LocalPlayer.CurrentWorld.Value.Name.ToString();
+                        if (!_alreadyInvitedPlayers.Contains(playerName.Trim() + "-" + worldName))
+                        {
+                            SendNoviceInvite(playerName, (short)Client.LocalPlayer.CurrentWorld.RowId);
+                            _alreadyInvitedPlayers.Add(playerName.Trim() + "-" + worldName);
+                            PluginLog.Information($"Sent invite to {playerName}");
+                        }
+                        _lastInviteTime = now;
+                    }
+                    catch (Exception ex)
+                    {
+                        PluginLog.Error(ex, $"Error sending invite to {playerName}");
+                    }
+                }
+            }
+        }
+    }
+
+    public void QueueFrameworkAction(Action action)
+    {
+        lock (_queueLock)
+        {
+            _frameworkQueue.Enqueue(action);
+        }
+    }
+
+    public int GetPendingInvitesCount()
+    {
+        return _pendingInvites.Count;
+    }
+
+    public void StartMassInviteProcess()
+    {
+        Task.Run(() =>
+        {
+            try
+            {
+                if (_isActive)
+                    return;
+
+                QueueFrameworkAction(() =>
+                {
+                    _isActive = true;
+                    PluginLog.Information("Starting mass invite process");
+                });
+
+                QueueFrameworkAction(() => PlayerSearchClearList());
+                QueueFrameworkAction(() => EnableSearchNop());
+
+                Thread.Sleep(2000);
+
+                var oldPlayers = 0;
+
+                for (int i = 1; i <= 11; i++)
+                {
+                    PluginLog.Information("Executing Search Area: " + i);
+                    QueueFrameworkAction(() => SendExecuteSearch(i));
+
+                    // Wait for search to complete
+                    var searchCompleted = false;
+                    while (!searchCompleted)
+                    {
+                        Thread.Sleep(2000);
+                        var currentPlayers = 0;
+                        var waitHandle = new ManualResetEventSlim(false);
+
+                        QueueFrameworkAction(() =>
+                        {
+                            currentPlayers = GetPlayerSearchAmount();
+                            if (oldPlayers == currentPlayers)
+                            {
+                                searchCompleted = true;
+                            }
+                            else
+                            {
+                                oldPlayers = currentPlayers;
+                            }
+                            waitHandle.Set();
+                        });
+
+                        waitHandle.Wait();
+
+                        if (searchCompleted)
+                        {
+                            PluginLog.Information($"Search area {i} completed with {currentPlayers} players");
+                            break;
+                        }
+                    }
+                }
+
+                QueueFrameworkAction(() => DisableSearchNop());
+                Thread.Sleep(1000);
+                QueueFrameworkAction(() =>
+                {
+                    SendPlayerSearchInvites();
+                    PluginLog.Information("Mass invite process completed - invites are now being sent gradually");
+                    _isActive = false;
+                });
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error(ex, "Error in mass invite process");
+                QueueFrameworkAction(() =>
+                {
+                    DisableSearchNop();
+                    _isActive = false;
+                });
+            }
+        });
     }
 
     private void InitHooknSigs()
@@ -227,16 +380,19 @@ public class NoviceInviterReborn : IDalamudPlugin
     }
     public void SendPlayerSearchInvites()
     {
+        PluginLog.Information($"Queueing {_playerSearchList.Count} players for invites");
+
         foreach (var player in _playerSearchList)
         {
             string worldName = Client.LocalPlayer.CurrentWorld.Value.Name.ToString();
-            if (_alreadyInvitedPlayers.Contains(player.Trim() + "-" + worldName))
-                continue;
-            SendNoviceInvite(player, (short)Client.LocalPlayer.CurrentWorld.RowId);
-            _alreadyInvitedPlayers.Add(player.Trim() + "-" + worldName);
-            Thread.Sleep(200);
+            if (!_alreadyInvitedPlayers.Contains(player.Trim() + "-" + worldName))
+            {
+                _pendingInvites.Enqueue(player);
+            }
         }
+
         _playerSearchList.Clear();
+        PluginLog.Information($"Total pending invites: {_pendingInvites.Count}");
     }
 
     private bool IsValidPlayerName(string playerName)
@@ -263,11 +419,11 @@ public class NoviceInviterReborn : IDalamudPlugin
             var agentStruct = (AgentSearch*)agent;
             agentStruct->OnlineStatusLeft = 0; // always 0
             agentStruct->OnlineStatusRight = 3; // sprouts + returner
-            if(!PluginConfig.checkBoxDoNotInvite)
+            if (!PluginConfig.checkBoxDoNotInvite)
             {
                 agentStruct->ClassSearchRow1 = 223; //223
                 agentStruct->ClassSearchRow3 = 107; //107
-            } 
+            }
             else
             {
                 agentStruct->ClassSearchRow1 = 255;
@@ -391,7 +547,7 @@ public class NoviceInviterReborn : IDalamudPlugin
 
             if (CheckIfMinimumTimeHasPassed(ref _minWaitToSave, 15000))
                 SaveInvitedPlayers();
-            
+
             if (!PluginConfig.enableInvite) return;
             if (Client is not { IsLoggedIn: true } || Condition[ConditionFlag.BoundByDuty]) return;
 
