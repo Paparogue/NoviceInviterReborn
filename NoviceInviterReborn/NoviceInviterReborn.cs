@@ -57,11 +57,11 @@ public class NoviceInviterReborn : IDalamudPlugin
     // Queue system for framework thread operations
     private readonly Queue<Action> _frameworkQueue = new();
     private readonly object _queueLock = new();
-
+    
     // Invite processing system
     private readonly Queue<string> _pendingInvites = new();
     private DateTime _lastInviteTime = DateTime.MinValue;
-    private const int InviteDelayMs = 200;
+    private const int InviteDelayMs = 500;
 
     public IDalamudPluginInterface PluginInterface { get; init; }
     public IClientState Client { get; init; }
@@ -190,24 +190,24 @@ public class NoviceInviterReborn : IDalamudPlugin
                 if (_isActive)
                     return;
 
-                QueueFrameworkAction(() =>
+                QueueFrameworkAction(() => 
                 {
                     _isActive = true;
                     PluginLog.Information("Starting mass invite process");
                 });
-
+                
                 QueueFrameworkAction(() => PlayerSearchClearList());
                 QueueFrameworkAction(() => EnableSearchNop());
-
+                
                 Thread.Sleep(2000);
-
+                
                 var oldPlayers = 0;
-
+                
                 for (int i = 1; i <= 11; i++)
                 {
                     PluginLog.Information("Executing Search Area: " + i);
                     QueueFrameworkAction(() => SendExecuteSearch(i));
-
+                    
                     // Wait for search to complete
                     var searchCompleted = false;
                     while (!searchCompleted)
@@ -215,7 +215,7 @@ public class NoviceInviterReborn : IDalamudPlugin
                         Thread.Sleep(2000);
                         var currentPlayers = 0;
                         var waitHandle = new ManualResetEventSlim(false);
-
+                        
                         QueueFrameworkAction(() =>
                         {
                             currentPlayers = GetPlayerSearchAmount();
@@ -229,9 +229,9 @@ public class NoviceInviterReborn : IDalamudPlugin
                             }
                             waitHandle.Set();
                         });
-
+                        
                         waitHandle.Wait();
-
+                        
                         if (searchCompleted)
                         {
                             PluginLog.Information($"Search area {i} completed with {currentPlayers} players");
@@ -239,10 +239,10 @@ public class NoviceInviterReborn : IDalamudPlugin
                         }
                     }
                 }
-
+                
                 QueueFrameworkAction(() => DisableSearchNop());
                 Thread.Sleep(1000);
-                QueueFrameworkAction(() =>
+                QueueFrameworkAction(() => 
                 {
                     SendPlayerSearchInvites();
                     PluginLog.Information("Mass invite process completed - invites are now being sent gradually");
@@ -252,7 +252,7 @@ public class NoviceInviterReborn : IDalamudPlugin
             catch (Exception ex)
             {
                 PluginLog.Error(ex, "Error in mass invite process");
-                QueueFrameworkAction(() =>
+                QueueFrameworkAction(() => 
                 {
                     DisableSearchNop();
                     _isActive = false;
@@ -381,7 +381,7 @@ public class NoviceInviterReborn : IDalamudPlugin
     public void SendPlayerSearchInvites()
     {
         PluginLog.Information($"Queueing {_playerSearchList.Count} players for invites");
-
+        
         foreach (var player in _playerSearchList)
         {
             string worldName = Client.LocalPlayer.CurrentWorld.Value.Name.ToString();
@@ -390,7 +390,7 @@ public class NoviceInviterReborn : IDalamudPlugin
                 _pendingInvites.Enqueue(player);
             }
         }
-
+        
         _playerSearchList.Clear();
         PluginLog.Information($"Total pending invites: {_pendingInvites.Count}");
     }
@@ -419,11 +419,11 @@ public class NoviceInviterReborn : IDalamudPlugin
             var agentStruct = (AgentSearch*)agent;
             agentStruct->OnlineStatusLeft = 0; // always 0
             agentStruct->OnlineStatusRight = 3; // sprouts + returner
-            if (!PluginConfig.checkBoxDoNotInvite)
+            if(!PluginConfig.checkBoxDoNotInvite)
             {
                 agentStruct->ClassSearchRow1 = 223; //223
                 agentStruct->ClassSearchRow3 = 107; //107
-            }
+            } 
             else
             {
                 agentStruct->ClassSearchRow1 = 255;
@@ -547,7 +547,7 @@ public class NoviceInviterReborn : IDalamudPlugin
 
             if (CheckIfMinimumTimeHasPassed(ref _minWaitToSave, 15000))
                 SaveInvitedPlayers();
-
+            
             if (!PluginConfig.enableInvite) return;
             if (Client is not { IsLoggedIn: true } || Condition[ConditionFlag.BoundByDuty]) return;
 
