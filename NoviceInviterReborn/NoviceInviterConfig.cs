@@ -1,6 +1,7 @@
 ﻿using System.Numerics;
 using Dalamud.Configuration;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
+
 
 namespace NoviceInviterReborn
 {
