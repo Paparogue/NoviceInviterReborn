@@ -52,7 +52,3 @@ https://raw.githubusercontent.com/Paparogue/PaparogueRepo/refs/heads/main/repo.j
 - You must be a Mentor with Novice Network invitation privileges for this plugin to work
 - The plugin saves a list of invited players to avoid sending duplicate invitations
 - The plugin will not function while in duties
-
-## Requirements
-
-- Mentor status with invitation privileges
